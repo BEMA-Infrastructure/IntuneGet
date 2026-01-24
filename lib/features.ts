@@ -17,9 +17,6 @@ export interface FeatureFlags {
 
   /** Local packager mode enabled (true self-hosting without GitHub Actions) */
   localPackager: boolean;
-
-  /** Site password protection enabled */
-  sitePassword: boolean;
 }
 
 /**
@@ -37,7 +34,6 @@ export function getFeatureFlags(): FeatureFlags {
     // Pipeline is enabled if either GitHub Actions or local packager is configured
     pipeline: localPackager || githubPipeline,
     localPackager,
-    sitePassword: Boolean(config.app.sitePassword),
   };
 }
 

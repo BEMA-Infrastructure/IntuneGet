@@ -53,9 +53,6 @@ NEXT_PUBLIC_URL=http://localhost:3000
 ```env
 # Skip pipeline for faster iteration
 # GITHUB_PAT=  # Leave empty to disable pipeline
-
-# Password protect during development
-SITE_PASSWORD=dev123
 ```
 
 ### Using a Shared Development Database

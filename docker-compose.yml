@@ -63,7 +63,6 @@ services:
       # ===========================================
       # Optional Features
       # ===========================================
-      - SITE_PASSWORD=${SITE_PASSWORD:-}
       - NEXT_PUBLIC_PLAUSIBLE_DOMAIN=${NEXT_PUBLIC_PLAUSIBLE_DOMAIN:-}
       - NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL=${NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL:-}
       - BEEHIIV_API_KEY=${BEEHIIV_API_KEY:-}

@@ -46,7 +46,6 @@ export interface AppConfig {
   app: {
     url: string;
     callbackSecret?: string;
-    sitePassword?: string;
   };
 
   // Optional services
@@ -129,7 +128,6 @@ export function getConfig(): AppConfig {
     app: {
       url: getEnvVar("NEXT_PUBLIC_URL") || "http://localhost:3000",
       callbackSecret: getEnvVar("CALLBACK_SECRET"),
-      sitePassword: getEnvVar("SITE_PASSWORD"),
     },
 
     analytics: {
