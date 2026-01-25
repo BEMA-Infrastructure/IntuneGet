@@ -80,8 +80,8 @@ export async function GET() {
     }
 
     const stats = {
-      signinClicks: countersResult.data?.find((row) => row.id === 'signin_clicks')?.count ?? 0,
-      appsDeployed: countersResult.data?.find((row) => row.id === 'apps_deployed')?.count ?? 0,
+      signinClicks: countersResult.data?.find((row) => row.id === 'signin_clicks')?.value ?? 0,
+      appsDeployed: countersResult.data?.find((row) => row.id === 'apps_deployed')?.value ?? 0,
       appsSupported: curatedAppsResult.count ?? 0,
     };
 
