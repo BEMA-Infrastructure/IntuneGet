@@ -305,7 +305,7 @@
   }
 
   .text-mono {
-    font-family: var(--font-geist-mono), monospace;
+    font-family: var(--font-mono), monospace;
     font-size: 0.75rem;
     letter-spacing: 0.02em;
   }

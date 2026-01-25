@@ -83,9 +83,9 @@ export function HeroSection() {
           <div className="space-y-6 md:space-y-8 max-w-4xl">
             <FadeIn delay={0.3} animateOnMount>
               <div className="relative flex items-center justify-center gap-2 md:gap-4 lg:gap-6">
-                {/* Winget - monospace to emphasize CLI origin */}
+                {/* Winget */}
                 <motion.span
-                  className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white font-mono tracking-tight"
+                  className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white tracking-tight"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.4, duration: 0.5 }}
@@ -98,7 +98,7 @@ export function HeroSection() {
 
                 {/* Intune - gradient to emphasize cloud destination */}
                 <motion.span
-                  className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-bold gradient-text-cyan"
+                  className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-bold gradient-text-cyan tracking-tight"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.4, duration: 0.5 }}

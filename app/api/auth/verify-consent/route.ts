@@ -13,7 +13,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 
-type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | null;
+type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | 'insufficient_intune_permissions' | null;
+
+interface PermissionStatus {
+  deviceManagementApps: boolean | null;
+  userRead: boolean | null;
+  groupRead: boolean | null;
+}
 
 interface ConsentVerificationResult {
   verified: boolean;
@@ -21,11 +27,13 @@ interface ConsentVerificationResult {
   message: string;
   cachedResult?: boolean;
   error?: ConsentErrorType;
+  permissions?: PermissionStatus;
 }
 
 interface GraphVerificationResult {
   verified: boolean;
   error?: ConsentErrorType;
+  permissions?: PermissionStatus;
 }
 
 /**
@@ -64,8 +72,75 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
     });
 
     if (response.ok) {
-      // We got a token - consent has been granted
-      return { verified: true };
+      // We got a token - now test actual API access for each permission
+      const tokenData = await response.json();
+      const accessToken = tokenData.access_token;
+
+      const permissions: PermissionStatus = {
+        deviceManagementApps: null,
+        userRead: true, // If we got a token, basic access works
+        groupRead: null,
+      };
+
+      // Test DeviceManagementApps.ReadWrite.All permission
+      try {
+        const intuneTestResponse = await fetch(
+          'https://graph.microsoft.com/beta/deviceAppManagement/mobileApps?$top=1&$select=id',
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (intuneTestResponse.status === 403) {
+          console.error(`Intune API access denied for tenant ${tenantId} - DeviceManagementApps.ReadWrite.All not granted`);
+          permissions.deviceManagementApps = false;
+        } else if (intuneTestResponse.status >= 500) {
+          // Server error - leave as null (unknown)
+          permissions.deviceManagementApps = null;
+        } else {
+          // Success or 404 (no apps yet) - permission is granted
+          permissions.deviceManagementApps = true;
+        }
+      } catch {
+        permissions.deviceManagementApps = null;
+      }
+
+      // Test Group.Read.All permission
+      try {
+        const groupTestResponse = await fetch(
+          'https://graph.microsoft.com/v1.0/groups?$top=1&$select=id',
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (groupTestResponse.status === 403) {
+          permissions.groupRead = false;
+        } else if (groupTestResponse.status >= 500) {
+          permissions.groupRead = null;
+        } else {
+          permissions.groupRead = true;
+        }
+      } catch {
+        permissions.groupRead = null;
+      }
+
+      // Determine overall verification status
+      const hasRequiredPermission = permissions.deviceManagementApps === true;
+
+      if (!hasRequiredPermission && permissions.deviceManagementApps === false) {
+        return { verified: false, error: 'insufficient_intune_permissions', permissions };
+      }
+
+      return { verified: hasRequiredPermission, permissions };
     }
 
     // Check the error
@@ -236,11 +311,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConsentVe
           tenantId,
           message: reVerifyResult.error === 'consent_not_granted'
             ? 'Admin consent has been revoked or expired.'
-            : reVerifyResult.error === 'missing_credentials'
-              ? 'Server configuration error. Contact administrator.'
-              : 'Unable to verify consent. Please check your connection and try again.',
+            : reVerifyResult.error === 'insufficient_intune_permissions'
+              ? 'Intune permissions not granted. Please re-grant admin consent to include DeviceManagementApps.ReadWrite.All permission.'
+              : reVerifyResult.error === 'missing_credentials'
+                ? 'Server configuration error. Contact administrator.'
+                : 'Unable to verify consent. Please check your connection and try again.',
           cachedResult: false,
           error: reVerifyResult.error,
+          permissions: reVerifyResult.permissions,
         });
       }
       return NextResponse.json({
@@ -248,6 +326,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConsentVe
         tenantId,
         message: 'Admin consent verified (cached)',
         cachedResult: true,
+        permissions: reVerifyResult.permissions,
       });
     }
 
@@ -266,11 +345,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConsentVe
         ? 'Admin consent verified'
         : verifyResult.error === 'consent_not_granted'
           ? 'Admin consent not granted. A Global Administrator must grant consent.'
-          : verifyResult.error === 'missing_credentials'
-            ? 'Server configuration error. Contact administrator.'
-            : 'Unable to verify consent. Please check your connection and try again.',
+          : verifyResult.error === 'insufficient_intune_permissions'
+            ? 'Intune permissions not granted. Please re-grant admin consent to include DeviceManagementApps.ReadWrite.All permission.'
+            : verifyResult.error === 'missing_credentials'
+              ? 'Server configuration error. Contact administrator.'
+              : 'Unable to verify consent. Please check your connection and try again.',
       cachedResult: false,
       error: verifyResult.error,
+      permissions: verifyResult.permissions,
     });
 
   } catch (error) {

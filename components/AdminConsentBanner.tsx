@@ -13,11 +13,14 @@ interface AdminConsentBannerProps {
   onConsentGranted?: () => void;
 }
 
+type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | 'insufficient_intune_permissions' | null;
+
 interface ConsentVerificationResult {
   verified: boolean;
   tenantId: string;
   message: string;
   cachedResult?: boolean;
+  error?: ConsentErrorType;
 }
 
 /**
@@ -34,14 +37,15 @@ export function AdminConsentBanner({ onConsentGranted }: AdminConsentBannerProps
   const [isVerifying, setIsVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showShareOption, setShowShareOption] = useState(false);
+  const [errorType, setErrorType] = useState<ConsentErrorType>(null);
 
   /**
    * Verify consent via API
    */
-  const verifyConsentViaApi = useCallback(async (): Promise<boolean> => {
+  const verifyConsentViaApi = useCallback(async (): Promise<ConsentVerificationResult> => {
     try {
       const token = await getAccessToken();
-      if (!token) return false;
+      if (!token) return { verified: false, tenantId: '', message: 'No token', error: 'network_error' };
 
       const response = await fetch('/api/auth/verify-consent', {
         method: 'POST',
@@ -51,13 +55,15 @@ export function AdminConsentBanner({ onConsentGranted }: AdminConsentBannerProps
         },
       });
 
-      if (!response.ok) return false;
+      if (!response.ok) {
+        return { verified: false, tenantId: '', message: 'Request failed', error: 'network_error' };
+      }
 
       const result: ConsentVerificationResult = await response.json();
-      return result.verified;
+      return result;
     } catch (error) {
       console.error('Error verifying consent:', error);
-      return false;
+      return { verified: false, tenantId: '', message: 'Error', error: 'network_error' };
     }
   }, [getAccessToken]);
 
@@ -95,19 +101,21 @@ export function AdminConsentBanner({ onConsentGranted }: AdminConsentBannerProps
     // Verify via API
     const checkConsent = async () => {
       setIsVerifying(true);
-      const verified = await verifyConsentViaApi();
+      const result = await verifyConsentViaApi();
       setIsVerifying(false);
 
-      if (verified) {
+      if (result.verified) {
         // Update localStorage cache
         localStorage.setItem(CONSENT_STORAGE_KEY, 'true');
         localStorage.setItem(CONSENT_CACHE_KEY, Date.now().toString());
         setIsVisible(false);
+        setErrorType(null);
         onConsentGranted?.();
       } else {
         // Clear any stale cache
         localStorage.removeItem(CONSENT_STORAGE_KEY);
         localStorage.removeItem(CONSENT_CACHE_KEY);
+        setErrorType(result.error || 'consent_not_granted');
         setIsVisible(true);
       }
     };
@@ -136,17 +144,18 @@ export function AdminConsentBanner({ onConsentGranted }: AdminConsentBannerProps
   const handleAlreadyGranted = async () => {
     // User claims consent was already granted - verify via API
     setIsVerifying(true);
-    const verified = await verifyConsentViaApi();
+    const result = await verifyConsentViaApi();
     setIsVerifying(false);
 
-    if (verified) {
+    if (result.verified) {
       localStorage.setItem(CONSENT_STORAGE_KEY, 'true');
       localStorage.setItem(CONSENT_CACHE_KEY, Date.now().toString());
       setIsVisible(false);
+      setErrorType(null);
       onConsentGranted?.();
     } else {
-      // Consent not actually granted - show a message
-      alert('Admin consent has not been granted yet. Please ask a Global Administrator to grant consent.');
+      // Set the error type to show appropriate message
+      setErrorType(result.error || 'consent_not_granted');
     }
   };
 
@@ -163,6 +172,58 @@ export function AdminConsentBanner({ onConsentGranted }: AdminConsentBannerProps
   }
 
   if (!isVisible) return null;
+
+  // Special UI for insufficient Intune permissions (existing users who need to re-consent)
+  if (errorType === 'insufficient_intune_permissions') {
+    return (
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-amber-500/20 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-medium text-white mb-1">
+              Intune Permissions Missing
+            </h3>
+            <p className="text-sm text-slate-400 mb-2">
+              Admin consent was granted, but the required Intune permission
+              (<code className="text-amber-400 text-xs">DeviceManagementApps.ReadWrite.All</code>)
+              is missing. This can happen if permissions were updated after initial consent.
+            </p>
+            <p className="text-sm text-slate-400 mb-4">
+              <strong className="text-amber-400">Your packaging jobs may be failing because of this.</strong> A Global Administrator needs to re-grant admin consent.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={handleGrantConsent}
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-black font-medium"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Re-grant Admin Consent
+              </Button>
+              <Button
+                onClick={handleAlreadyGranted}
+                size="sm"
+                variant="ghost"
+                className="text-slate-400 hover:text-white"
+                disabled={isVerifying}
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  'Check Again'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">

@@ -11,8 +11,10 @@ interface CancelRequestBody {
   jobId: string;
 }
 
-// Statuses that can be cancelled
+// Statuses that can be cancelled (active jobs)
 const CANCELLABLE_STATUSES = ['queued', 'packaging', 'uploading'];
+// Statuses that can be force-dismissed by the user
+const DISMISSABLE_STATUSES = ['queued', 'packaging', 'uploading', 'completed', 'failed'];
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,14 +30,15 @@ export async function POST(request: NextRequest) {
     // Decode the token to get user info
     const accessToken = authHeader.slice(7);
     let userId: string;
-    let userEmail: string;
+    let userEmail: string | null = null;
 
     try {
       const tokenPayload = JSON.parse(
         Buffer.from(accessToken.split('.')[1], 'base64').toString()
       );
       userId = tokenPayload.oid || tokenPayload.sub;
-      userEmail = tokenPayload.preferred_username || tokenPayload.email || 'unknown';
+      // Try multiple token fields for email
+      userEmail = tokenPayload.preferred_username || tokenPayload.email || tokenPayload.upn || null;
 
       if (!userId) {
         return NextResponse.json(
@@ -87,50 +90,113 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if job is in a cancellable status
-    if (!CANCELLABLE_STATUSES.includes(job.status)) {
+    // Check if job is already cancelled or deployed (cannot be modified)
+    if (job.status === 'cancelled') {
+      return NextResponse.json({
+        success: true,
+        message: 'Job is already cancelled',
+        jobId,
+        githubCancelled: null,
+      });
+    }
+
+    if (job.status === 'deployed') {
+      return NextResponse.json(
+        { error: 'Cannot cancel a deployed job. It is already in Intune.' },
+        { status: 400 }
+      );
+    }
+
+    // Check if job can be dismissed
+    if (!DISMISSABLE_STATUSES.includes(job.status)) {
       return NextResponse.json(
         { error: `Job cannot be cancelled. Current status: ${job.status}` },
         { status: 400 }
       );
     }
 
-    // Attempt to cancel GitHub workflow if run ID exists
+    // Attempt to cancel GitHub workflow if run ID exists and job is still active
     let githubCancelResult = null;
-    if (job.github_run_id && isGitHubActionsConfigured()) {
+    const isActiveJob = CANCELLABLE_STATUSES.includes(job.status);
+    if (isActiveJob && job.github_run_id && isGitHubActionsConfigured()) {
       githubCancelResult = await cancelWorkflowRun(job.github_run_id);
       console.log('GitHub cancel result:', githubCancelResult);
     }
 
     // Update job status to cancelled in database
-    // We update regardless of GitHub result - the user wants this cancelled
-    const updateData: Record<string, unknown> = {
-      status: 'cancelled',
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: userEmail,
-      updated_at: new Date().toISOString(),
-    };
-
-    // Add note about GitHub cancellation if it had issues
-    if (githubCancelResult && !githubCancelResult.success) {
-      updateData.error_message = `Job cancelled by user. GitHub workflow: ${githubCancelResult.message}`;
-    } else {
-      updateData.error_message = 'Job cancelled by user';
+    // We update regardless of GitHub result - the user wants this cancelled/dismissed
+    let errorMessage = 'Job cancelled by user';
+    if (!isActiveJob) {
+      errorMessage = `Job dismissed by user (was ${job.status})`;
+    } else if (githubCancelResult && !githubCancelResult.success) {
+      errorMessage = `Job cancelled by user. GitHub workflow: ${githubCancelResult.message}`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (supabase as any)
-      .from('packaging_jobs')
-      .update(updateData)
-      .eq('id', jobId)
-      .eq('status', job.status); // Optimistic lock - only update if status hasn't changed
+    // Use token email, or fall back to job's stored user_email
+    const cancelledByEmail = userEmail || job.user_email || 'unknown';
 
+    // Try full update first with all cancellation fields
+    const fullUpdateData: Record<string, unknown> = {
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: cancelledByEmail,
+      updated_at: new Date().toISOString(),
+      error_message: errorMessage,
+    };
+
+    // Build query - use optimistic lock for active jobs, but allow force update for dismissed jobs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let updateQuery = (supabase as any)
+      .from('packaging_jobs')
+      .update(fullUpdateData)
+      .eq('id', jobId);
+
+    // Only use optimistic lock for active jobs (prevent race conditions)
+    // For dismissed jobs (completed/failed), we allow updating regardless of current status
+    if (isActiveJob) {
+      updateQuery = updateQuery.eq('status', job.status);
+    } else {
+      // For non-active jobs, exclude already cancelled or deployed
+      updateQuery = updateQuery.not('status', 'in', '("cancelled","deployed")');
+    }
+
+    let { error: updateError } = await updateQuery;
+
+    // If full update fails (e.g., missing columns), try minimal update
     if (updateError) {
-      console.error('Database update error:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update job status. The job may have already changed status.' },
-        { status: 500 }
-      );
+      console.error('Full database update error:', updateError);
+
+      // Fallback to minimal update with only essential fields
+      const minimalUpdateData: Record<string, unknown> = {
+        status: 'cancelled',
+        updated_at: new Date().toISOString(),
+        error_message: errorMessage,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let minimalQuery = (supabase as any)
+        .from('packaging_jobs')
+        .update(minimalUpdateData)
+        .eq('id', jobId);
+
+      if (isActiveJob) {
+        minimalQuery = minimalQuery.eq('status', job.status);
+      } else {
+        minimalQuery = minimalQuery.not('status', 'in', '("cancelled","deployed")');
+      }
+
+      const { error: minimalError } = await minimalQuery;
+
+      if (minimalError) {
+        console.error('Minimal database update error:', minimalError);
+        return NextResponse.json(
+          { error: 'Failed to update job status. The job may have already changed status.' },
+          { status: 500 }
+        );
+      }
+
+      // Minimal update succeeded
+      updateError = null;
     }
 
     return NextResponse.json({

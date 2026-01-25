@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   User,
@@ -9,18 +10,94 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Loader2,
+  HelpCircle,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMicrosoftAuth } from '@/hooks/useMicrosoftAuth';
 import { PageHeader, SectionTransition } from '@/components/dashboard';
 import { cn } from '@/lib/utils';
 
+interface PermissionStatusState {
+  checked: boolean;
+  checking: boolean;
+  lastChecked?: Date;
+  permissions: {
+    deviceManagementApps: boolean | null;
+    userRead: boolean | null;
+    groupRead: boolean | null;
+  };
+}
+
 export default function SettingsPage() {
-  const { user, signOut } = useMicrosoftAuth();
+  const { user, signOut, getAccessToken, requestAdminConsent } = useMicrosoftAuth();
   const prefersReducedMotion = useReducedMotion();
+  const [isChecking, setIsChecking] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatusState | null>(null);
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleCheckPermissions = async () => {
+    setIsChecking(true);
+    setPermissionStatus(prev => prev ? { ...prev, checking: true } : null);
+
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setPermissionStatus({
+          checked: true,
+          checking: false,
+          lastChecked: new Date(),
+          permissions: {
+            deviceManagementApps: null,
+            userRead: null,
+            groupRead: null,
+          },
+        });
+        return;
+      }
+
+      const response = await fetch('/api/auth/verify-consent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const result = await response.json();
+
+      setPermissionStatus({
+        checked: true,
+        checking: false,
+        lastChecked: new Date(),
+        permissions: {
+          deviceManagementApps: result.permissions?.deviceManagementApps ?? (result.verified ? true : null),
+          userRead: result.permissions?.userRead ?? true,
+          groupRead: result.permissions?.groupRead ?? null,
+        },
+      });
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      setPermissionStatus({
+        checked: true,
+        checking: false,
+        lastChecked: new Date(),
+        permissions: {
+          deviceManagementApps: null,
+          userRead: null,
+          groupRead: null,
+        },
+      });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleGrantConsent = () => {
+    requestAdminConsent();
   };
 
   const containerVariants = {
@@ -135,11 +212,27 @@ export default function SettingsPage() {
           variants={itemVariants}
           className="glass-dark rounded-xl p-6 border border-white/5 hover:border-accent-cyan/20 transition-colors"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-lg bg-accent-cyan/10 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-accent-cyan" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-accent-cyan/10 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-accent-cyan" />
+              </div>
+              <h2 className="text-lg font-semibold text-white">API Permissions</h2>
             </div>
-            <h2 className="text-lg font-semibold text-white">API Permissions</h2>
+            <Button
+              onClick={handleCheckPermissions}
+              disabled={isChecking}
+              variant="outline"
+              size="sm"
+              className="border-white/10 hover:border-accent-cyan/50"
+            >
+              {isChecking ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Shield className="w-4 h-4 mr-2" />
+              )}
+              {isChecking ? 'Checking...' : 'Check Permissions'}
+            </Button>
           </div>
 
           <p className="text-zinc-400 text-sm mb-4">
@@ -150,19 +243,43 @@ export default function SettingsPage() {
             <PermissionItem
               name="DeviceManagementApps.ReadWrite.All"
               description="Read and write Intune applications"
-              granted
+              granted={permissionStatus?.permissions.deviceManagementApps ?? null}
+              checking={isChecking}
             />
             <PermissionItem
               name="User.Read"
               description="Read your profile information"
-              granted
+              granted={permissionStatus?.permissions.userRead ?? null}
+              checking={isChecking}
             />
             <PermissionItem
               name="Group.Read.All"
               description="Read group memberships for app assignment"
-              granted
+              granted={permissionStatus?.permissions.groupRead ?? null}
+              checking={isChecking}
             />
           </div>
+
+          {permissionStatus?.lastChecked && (
+            <p className="text-xs text-zinc-500 mt-3">
+              Last checked: {permissionStatus.lastChecked.toLocaleString()}
+            </p>
+          )}
+
+          {permissionStatus?.permissions.deviceManagementApps === false && (
+            <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <p className="text-sm text-amber-400 mb-2">
+                Intune permission is missing. A Global Administrator needs to re-grant consent.
+              </p>
+              <Button
+                onClick={handleGrantConsent}
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-black"
+              >
+                Re-grant Admin Consent
+              </Button>
+            </div>
+          )}
 
           <div className="mt-6 p-4 bg-bg-elevated rounded-lg border border-white/5">
             <p className="text-zinc-400 text-sm">
@@ -243,20 +360,50 @@ function PermissionItem({
   name,
   description,
   granted,
+  checking,
 }: {
   name: string;
   description: string;
-  granted: boolean;
+  granted: boolean | null;
+  checking?: boolean;
 }) {
+  const renderIcon = () => {
+    if (checking) {
+      return <Loader2 className="w-5 h-5 text-zinc-400 flex-shrink-0 mt-0.5 animate-spin" />;
+    }
+    if (granted === true) {
+      return <CheckCircle2 className="w-5 h-5 text-status-success flex-shrink-0 mt-0.5" />;
+    }
+    if (granted === false) {
+      return <XCircle className="w-5 h-5 text-status-error flex-shrink-0 mt-0.5" />;
+    }
+    return <HelpCircle className="w-5 h-5 text-zinc-500 flex-shrink-0 mt-0.5" />;
+  };
+
+  const renderStatus = () => {
+    if (checking) {
+      return <span className="text-zinc-400 text-xs ml-2">Checking...</span>;
+    }
+    if (granted === true) {
+      return <span className="text-status-success text-xs ml-2">Granted</span>;
+    }
+    if (granted === false) {
+      return <span className="text-status-error text-xs ml-2">Missing</span>;
+    }
+    return <span className="text-zinc-500 text-xs ml-2">Not checked</span>;
+  };
+
   return (
-    <div className="flex items-start gap-3 p-3 bg-bg-elevated rounded-lg border border-white/5">
-      {granted ? (
-        <CheckCircle2 className="w-5 h-5 text-status-success flex-shrink-0 mt-0.5" />
-      ) : (
-        <AlertCircle className="w-5 h-5 text-status-warning flex-shrink-0 mt-0.5" />
-      )}
-      <div>
-        <p className="text-white font-mono text-sm">{name}</p>
+    <div className={cn(
+      "flex items-start gap-3 p-3 bg-bg-elevated rounded-lg border",
+      granted === false ? "border-status-error/30" : "border-white/5"
+    )}>
+      {renderIcon()}
+      <div className="flex-1">
+        <div className="flex items-center">
+          <p className="text-white font-mono text-sm">{name}</p>
+          {renderStatus()}
+        </div>
         <p className="text-zinc-500 text-sm mt-0.5">{description}</p>
       </div>
     </div>

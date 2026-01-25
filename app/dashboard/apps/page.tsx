@@ -110,7 +110,7 @@ export default function AppCatalogPage() {
       <div className={mounted ? 'animate-fade-up stagger-1' : 'opacity-0'}>
         <h1 className="text-display-sm text-white">App Catalog</h1>
         <p className="text-zinc-400 mt-2">
-          Browse and deploy from <span className="text-accent-cyan">10,000+</span> Winget packages
+          Browse and deploy from <span className="text-accent-cyan">{categoriesData?.totalApps?.toLocaleString() || '...'}</span> curated Winget packages
         </p>
       </div>
 

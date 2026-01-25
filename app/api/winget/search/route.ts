@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { searchPackages } from '@/lib/winget-api';
 
 export const runtime = 'edge';
 
@@ -107,14 +106,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fall back to lib/winget-api if no curated results
-    const packages = await searchPackages(query, sanitizedLimit, category || undefined);
-
+    // No results found - the enhanced search_curated_apps function already tried
+    // both FTS and ILIKE fallback, so return empty results
     return NextResponse.json({
       query,
-      count: packages.length,
-      packages,
-      source: 'api',
+      count: 0,
+      packages: [],
+      source: 'curated',
     });
   } catch (error) {
     console.error('Search error:', error);

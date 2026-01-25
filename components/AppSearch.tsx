@@ -53,7 +53,7 @@ export function AppSearch({ value, onChange, isLoading = false }: AppSearchProps
 
         <Input
           type="text"
-          placeholder="Search 10,000+ Winget packages..."
+          placeholder="Search curated Winget packages..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onFocus={() => setIsFocused(true)}

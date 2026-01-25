@@ -24,6 +24,7 @@ interface Category {
 
 interface CategoriesResponse {
   count: number;
+  totalApps: number;
   categories: Category[];
 }
 

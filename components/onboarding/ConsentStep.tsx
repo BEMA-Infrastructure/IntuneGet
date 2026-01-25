@@ -20,8 +20,8 @@ interface ConsentStepProps {
   onBack: () => void;
 }
 
-type ConsentStatus = 'checking' | 'not_granted' | 'granted' | 'network_error' | 'config_error';
-type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | null;
+type ConsentStatus = 'checking' | 'not_granted' | 'granted' | 'network_error' | 'config_error' | 'insufficient_permissions';
+type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | 'insufficient_intune_permissions' | null;
 
 interface ConsentVerifyResult {
   verified: boolean;
@@ -92,6 +92,8 @@ export function ConsentStep({ onNext, onBack }: ConsentStepProps) {
         setStatus('config_error');
       } else if (result.error === 'network_error') {
         setStatus('network_error');
+      } else if (result.error === 'insufficient_intune_permissions') {
+        setStatus('insufficient_permissions');
       } else {
         setStatus('not_granted');
       }
@@ -133,6 +135,8 @@ export function ConsentStep({ onNext, onBack }: ConsentStepProps) {
       setStatus('config_error');
     } else if (result.error === 'network_error') {
       setStatus('network_error');
+    } else if (result.error === 'insufficient_intune_permissions') {
+      setStatus('insufficient_permissions');
     } else {
       setStatus('not_granted');
     }
@@ -256,6 +260,68 @@ export function ConsentStep({ onNext, onBack }: ConsentStepProps) {
     );
   }
 
+  // Insufficient Intune permissions state
+  if (status === 'insufficient_permissions') {
+    return (
+      <div className="text-center max-w-2xl mx-auto">
+        <div className="mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-amber-500/10 rounded-2xl">
+            <AlertTriangle className="w-10 h-10 text-amber-500" />
+          </div>
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-4">
+          Intune Permissions Missing
+        </h1>
+        <p className="text-slate-400 mb-6">
+          Admin consent was granted, but the required Intune permission
+          (<code className="text-amber-400">DeviceManagementApps.ReadWrite.All</code>)
+          was not included. This can happen if permissions were updated after initial consent.
+        </p>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-6">
+          <p className="text-sm text-slate-300 mb-4">
+            A <strong className="text-amber-400">Global Administrator</strong> needs to re-grant admin consent
+            to include the updated permissions.
+          </p>
+          <Button
+            onClick={handleGrantConsent}
+            className="bg-amber-500 hover:bg-amber-600 text-black"
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Re-grant Admin Consent
+          </Button>
+        </div>
+        <Button
+          onClick={handleVerify}
+          disabled={isVerifying}
+          variant="ghost"
+          className="text-slate-400 hover:text-white"
+        >
+          {isVerifying ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Check Again
+            </>
+          )}
+        </Button>
+        <div className="mt-8">
+          <Button
+            onClick={onBack}
+            variant="ghost"
+            className="text-slate-500 hover:text-slate-300"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to welcome
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // Not granted state - show options
   return (
     <div className="text-center max-w-2xl mx-auto">
@@ -271,135 +337,141 @@ export function ConsentStep({ onNext, onBack }: ConsentStepProps) {
         Admin Consent Required
       </h1>
 
-      <p className="text-slate-400 mb-8">
+      <p className="text-slate-400 mb-6">
         To deploy apps to your Intune tenant, a{' '}
-        <strong className="text-amber-400">Global Administrator</strong> needs
-        to grant permission for IntuneGet to access your organization.
+        <strong className="text-amber-400">Global Administrator</strong> or{' '}
+        <strong className="text-amber-400">Privileged Role Administrator</strong>{' '}
+        must grant permission for IntuneGet to access your organization.
       </p>
 
-      {/* Content based on showShareOption */}
-      {!showShareOption ? (
-        <>
-          {/* Action buttons */}
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-6">
-            <div className="space-y-4">
-              <Button
-                onClick={handleGrantConsent}
-                size="lg"
-                className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium"
-              >
-                <Shield className="w-5 h-5 mr-2" />
-                Grant Admin Consent
-              </Button>
+      {/* Role selection question */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-6">
+        <p className="text-white font-medium mb-4">
+          Are you a Global Administrator?
+        </p>
 
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-700" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-slate-900 px-2 text-slate-500">or</span>
-                </div>
-              </div>
+        {!showShareOption ? (
+          <div className="space-y-3">
+            {/* Primary option - for non-admins (most common case) */}
+            <Button
+              onClick={() => setShowShareOption(true)}
+              size="lg"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium"
+            >
+              No, I need to request access from my admin
+            </Button>
 
-              <Button
-                onClick={() => setShowShareOption(true)}
-                size="lg"
-                variant="outline"
-                className="w-full border-slate-700 text-slate-300 hover:bg-slate-800"
-              >
-                I'm not a Global Admin
-              </Button>
+            {/* Secondary option - for actual admins */}
+            <Button
+              onClick={handleGrantConsent}
+              size="lg"
+              variant="outline"
+              className="w-full border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Yes, I am a Global Administrator
+            </Button>
+
+            {/* Warning about admin requirement */}
+            <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+              <p className="text-xs text-amber-400/80">
+                Only Global Administrators or Privileged Role Administrators can grant consent.
+                Intune Administrators and other roles cannot grant organization-wide permissions.
+              </p>
             </div>
           </div>
+        ) : (
+          <>
+            {/* Share link option */}
+            <div className="text-left">
+              <p className="text-sm text-slate-300 mb-4">
+                Share this link with your Global Administrator. They need to click it and approve the permissions:
+              </p>
 
-          {/* Already granted option */}
-          <Button
-            onClick={handleVerify}
-            disabled={isVerifying}
-            variant="ghost"
-            className="text-slate-400 hover:text-white"
-          >
-            {isVerifying ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Already granted? Click to verify
-              </>
-            )}
-          </Button>
-        </>
-      ) : (
-        <>
-          {/* Share link option */}
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-6 text-left">
-            <div className="flex items-start gap-3 mb-4">
-              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-slate-300 mb-2">
-                  <strong>Intune Administrators</strong> cannot grant admin
-                  consent. Please share this link with your Global
-                  Administrator:
+              <div className="flex items-center gap-2 mb-4">
+                <code className="flex-1 bg-slate-950 px-3 py-2 rounded-lg text-xs text-slate-400 overflow-hidden text-ellipsis whitespace-nowrap">
+                  {shareableUrl}
+                </code>
+                <Button
+                  onClick={handleCopyLink}
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-700 flex-shrink-0"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+
+              <div className="bg-slate-950/50 rounded-lg p-3 mb-4">
+                <p className="text-xs text-slate-400 mb-2">
+                  <strong className="text-slate-300">What to tell your admin:</strong>
+                </p>
+                <p className="text-xs text-slate-500">
+                  "I need you to approve IntuneGet for our organization. Please click this link and sign in with your Global Admin account to grant the required permissions."
                 </p>
               </div>
+
+              <p className="text-xs text-slate-500">
+                After your admin grants consent, click the button below to verify.
+              </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-slate-950 px-3 py-2 rounded-lg text-xs text-slate-400 overflow-hidden text-ellipsis whitespace-nowrap">
-                {shareableUrl}
-              </code>
+            {/* Action buttons */}
+            <div className="flex items-center justify-center gap-3 mt-4">
               <Button
-                onClick={handleCopyLink}
-                size="sm"
-                variant="outline"
-                className="border-slate-700 flex-shrink-0"
+                onClick={() => setShowShareOption(false)}
+                variant="ghost"
+                className="text-slate-400 hover:text-white"
               >
-                {copied ? (
-                  <Check className="w-4 h-4 text-green-400" />
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <Button
+                onClick={handleVerify}
+                disabled={isVerifying}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
                 ) : (
-                  <Copy className="w-4 h-4" />
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    My admin approved it - Verify
+                  </>
                 )}
               </Button>
             </div>
+          </>
+        )}
+      </div>
 
-            <p className="text-xs text-slate-500 mt-4">
-              After the Global Admin grants consent, come back here and click
-              "Verify" below.
-            </p>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center justify-center gap-4">
-            <Button
-              onClick={() => setShowShareOption(false)}
-              variant="ghost"
-              className="text-slate-400 hover:text-white"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
-            <Button
-              onClick={handleVerify}
-              disabled={isVerifying}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {isVerifying ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Verify Consent
-                </>
-              )}
-            </Button>
-          </div>
-        </>
+      {/* Already granted option - outside the card */}
+      {!showShareOption && (
+        <Button
+          onClick={handleVerify}
+          disabled={isVerifying}
+          variant="ghost"
+          className="text-slate-400 hover:text-white"
+        >
+          {isVerifying ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Already granted? Click to verify
+            </>
+          )}
+        </Button>
       )}
 
       {/* Back button */}

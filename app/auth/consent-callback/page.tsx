@@ -135,22 +135,47 @@ function ConsentCallbackContent() {
           <>
             <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-white mb-2">
-              Setup Failed
+              Admin Consent Not Granted
             </h2>
             <p className="text-slate-400 mb-4">
               {errorMessage || 'Something went wrong during setup.'}
             </p>
+
+            {/* Detailed explanation */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-4 text-left">
+              <p className="text-sm text-amber-400 font-medium mb-2">
+                Why did this happen?
+              </p>
+              <ul className="text-xs text-slate-400 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-600 mt-0.5">1.</span>
+                  <span>You may not have the required role. Only <strong className="text-white">Global Administrators</strong> or <strong className="text-white">Privileged Role Administrators</strong> can grant admin consent.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-600 mt-0.5">2.</span>
+                  <span>Intune Administrators, Application Administrators, and other roles <strong className="text-red-400">cannot</strong> grant organization-wide consent.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-600 mt-0.5">3.</span>
+                  <span>If you&apos;re not sure of your role, ask your IT department who the Global Admin is.</span>
+                </li>
+              </ul>
+            </div>
+
             <div className="space-y-2">
               <Button
-                onClick={() => router.push('/auth/signin')}
+                onClick={() => router.push('/onboarding?step=2')}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
-                Try Again
+                Go Back and Request from Admin
               </Button>
-              <p className="text-xs text-slate-500 mt-4">
-                Note: Admin consent requires a Global Administrator or
-                Privileged Role Administrator account.
-              </p>
+              <Button
+                onClick={() => router.push('/auth/signin')}
+                variant="outline"
+                className="w-full border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                Start Over
+              </Button>
             </div>
           </>
         )}

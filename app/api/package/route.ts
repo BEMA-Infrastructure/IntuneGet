@@ -35,18 +35,26 @@ interface PackagingJobRecord {
   created_at: string;
 }
 
+type ConsentVerifyError = 'consent_not_granted' | 'insufficient_intune_permissions' | 'network_error' | null;
+
+interface ConsentVerifyResult {
+  verified: boolean;
+  error?: ConsentVerifyError;
+}
+
 /**
  * Verify that admin consent has been granted for the tenant
  * Uses client credentials grant to test if the service principal exists
+ * Also tests actual Intune API access to verify DeviceManagementApps.ReadWrite.All permission
  */
-async function verifyTenantConsent(tenantId: string): Promise<boolean> {
+async function verifyTenantConsent(tenantId: string): Promise<ConsentVerifyResult> {
   const clientId = process.env.AZURE_AD_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_AD_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
   // If credentials not configured, skip check (allows local/dev mode)
   if (!clientId || !clientSecret) {
     console.warn('Consent verification skipped: credentials not configured');
-    return true;
+    return { verified: true };
   }
 
   try {
@@ -63,10 +71,39 @@ async function verifyTenantConsent(tenantId: string): Promise<boolean> {
         }).toString(),
       }
     );
-    return response.ok;
+
+    if (!response.ok) {
+      return { verified: false, error: 'consent_not_granted' };
+    }
+
+    // Token obtained - now test actual Intune API access
+    const tokenData = await response.json();
+    const accessToken = tokenData.access_token;
+
+    const intuneTestResponse = await fetch(
+      'https://graph.microsoft.com/beta/deviceAppManagement/mobileApps?$top=1&$select=id',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (intuneTestResponse.status === 403) {
+      console.error(`Intune API access denied for tenant ${tenantId} - DeviceManagementApps.ReadWrite.All not granted`);
+      return { verified: false, error: 'insufficient_intune_permissions' };
+    }
+
+    if (intuneTestResponse.status >= 500) {
+      return { verified: false, error: 'network_error' };
+    }
+
+    return { verified: true };
   } catch (error) {
     console.error('Error verifying tenant consent:', error);
-    return false;
+    return { verified: false, error: 'network_error' };
   }
 }
 
@@ -162,13 +199,17 @@ export async function POST(request: NextRequest) {
 
     // Verify admin consent for the target tenant before accepting jobs
     // This prevents jobs from being queued when uploads will ultimately fail
-    const consentVerified = await verifyTenantConsent(tenantId);
-    if (!consentVerified) {
+    const consentResult = await verifyTenantConsent(tenantId);
+    if (!consentResult.verified) {
+      const isPermissionError = consentResult.error === 'insufficient_intune_permissions';
       return NextResponse.json(
         {
-          error: 'Admin consent required',
-          message: 'Admin consent has not been granted for your organization. Please complete the onboarding process.',
-          consentRequired: true,
+          error: isPermissionError ? 'Intune permissions required' : 'Admin consent required',
+          message: isPermissionError
+            ? 'Admin consent was granted but Intune permissions (DeviceManagementApps.ReadWrite.All) are missing. Please have a Global Administrator re-grant admin consent.'
+            : 'Admin consent has not been granted for your organization. Please complete the onboarding process.',
+          consentRequired: consentResult.error === 'consent_not_granted',
+          permissionsRequired: isPermissionError,
         },
         { status: 403 }
       );

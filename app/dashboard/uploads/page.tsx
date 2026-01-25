@@ -420,7 +420,10 @@ function UploadJobCard({
   const config = statusConfig[job.status] || statusConfig.queued;
   const StatusIcon = config.icon;
   const isActive = ['queued', 'packaging', 'uploading'].includes(job.status);
+  // Allow cancelling active jobs or dismissing completed/failed jobs
   const isCancellable = ['queued', 'packaging', 'uploading'].includes(job.status);
+  const isDismissable = ['completed', 'failed'].includes(job.status);
+  const canRemove = isCancellable || isDismissable;
 
   const itemVariants = {
     hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 20 },
@@ -497,35 +500,47 @@ function UploadJobCard({
               )}
             </div>
             <div className="flex items-center gap-2">
-              {isCancellable && (
+              {canRemove && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-status-error/30 text-status-error hover:bg-status-error/10 hover:border-status-error/50"
+                      className={cn(
+                        isDismissable
+                          ? "border-zinc-500/30 text-zinc-400 hover:bg-zinc-500/10 hover:border-zinc-500/50"
+                          : "border-status-error/30 text-status-error hover:bg-status-error/10 hover:border-status-error/50"
+                      )}
                       disabled={isCancelling}
                     >
                       {isCancelling ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : isDismissable ? (
+                        <XCircle className="w-4 h-4 mr-2" />
                       ) : (
                         <Ban className="w-4 h-4 mr-2" />
                       )}
-                      Cancel
+                      {isDismissable ? 'Dismiss' : 'Cancel'}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Cancel Upload?</AlertDialogTitle>
+                      <AlertDialogTitle>
+                        {isDismissable ? 'Dismiss Job?' : 'Cancel Upload?'}
+                      </AlertDialogTitle>
                       <AlertDialogDescription>
-                        Are you sure you want to cancel the upload for {job.display_name}?
-                        This action cannot be undone.
+                        {isDismissable
+                          ? `Are you sure you want to dismiss ${job.display_name} from your list? This will mark it as cancelled.`
+                          : `Are you sure you want to cancel the upload for ${job.display_name}? This action cannot be undone.`
+                        }
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Keep Running</AlertDialogCancel>
+                      <AlertDialogCancel>
+                        {isDismissable ? 'Keep' : 'Keep Running'}
+                      </AlertDialogCancel>
                       <AlertDialogAction onClick={() => onCancel(job.id)}>
-                        Cancel Upload
+                        {isDismissable ? 'Dismiss' : 'Cancel Upload'}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -562,7 +577,22 @@ function UploadJobCard({
             <div className="mt-4 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-status-error flex-shrink-0 mt-0.5" />
-                <p className="text-status-error/90 text-sm">{job.error_message}</p>
+                <div className="text-sm">
+                  <p className="text-status-error/90">{job.error_message}</p>
+                  {/* Show hint for permission-related errors */}
+                  {(job.error_message.toLowerCase().includes('forbidden') ||
+                    job.error_message.includes('403') ||
+                    job.error_message.toLowerCase().includes('unauthorized') ||
+                    job.error_message.toLowerCase().includes('permission') ||
+                    job.error_message.toLowerCase().includes('access denied')) && (
+                    <p className="text-status-warning mt-2">
+                      This may be a permissions issue. Check that your organization&apos;s Global Administrator has granted admin consent with Intune permissions.
+                      <Link href="/onboarding" className="text-accent-cyan hover:underline ml-1">
+                        Re-verify permissions
+                      </Link>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
