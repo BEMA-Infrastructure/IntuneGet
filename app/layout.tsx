@@ -109,6 +109,7 @@ export default function RootLayout({
           <>
             <Script
               src={PLAUSIBLE_SCRIPT_URL}
+              data-domain={PLAUSIBLE_DOMAIN}
               strategy="afterInteractive"
             />
             <Script id="plausible-init" strategy="afterInteractive">
