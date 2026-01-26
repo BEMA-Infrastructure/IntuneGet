@@ -12,6 +12,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  logTokenAcquired,
+  logPermissionVerification,
+  logApiPermissionTest,
+  logPermissions,
+} from '@/lib/permission-logger';
 
 type ConsentErrorType = 'missing_credentials' | 'network_error' | 'consent_not_granted' | 'insufficient_intune_permissions' | null;
 
@@ -84,19 +90,34 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
         );
         tokenRoles = tokenPayload.roles || [];
 
+        // Log token acquisition with roles
+        logTokenAcquired('/api/auth/verify-consent', tenantId, tokenRoles);
+
         // Check for the exact permission needed for Intune deployment
         const hasIntuneWritePermission = tokenRoles.includes('DeviceManagementApps.ReadWrite.All');
 
         if (!hasIntuneWritePermission) {
           console.error(`Token roles missing DeviceManagementApps.ReadWrite.All. Found roles: ${tokenRoles.join(', ')}`);
+
+          const permissionStatus = {
+            deviceManagementApps: false,
+            userRead: true,
+            groupRead: tokenRoles.includes('Group.Read.All'),
+          };
+
+          // Log the verification failure
+          logPermissionVerification(
+            '/api/auth/verify-consent',
+            tenantId,
+            false,
+            permissionStatus,
+            'insufficient_intune_permissions'
+          );
+
           return {
             verified: false,
             error: 'insufficient_intune_permissions',
-            permissions: {
-              deviceManagementApps: false,
-              userRead: true,
-              groupRead: tokenRoles.includes('Group.Read.All'),
-            },
+            permissions: permissionStatus,
           };
         }
       } catch (tokenDecodeError) {
@@ -133,6 +154,15 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
           // Success or 404 (no apps yet) - permission is granted
           permissions.deviceManagementApps = true;
         }
+
+        // Log the Intune API permission test
+        logApiPermissionTest(
+          '/api/auth/verify-consent',
+          tenantId,
+          'DeviceManagementApps.ReadWrite.All',
+          intuneTestResponse.status,
+          permissions.deviceManagementApps
+        );
       } catch {
         permissions.deviceManagementApps = null;
       }
@@ -157,12 +187,30 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
         } else {
           permissions.groupRead = true;
         }
+
+        // Log the Group API permission test
+        logApiPermissionTest(
+          '/api/auth/verify-consent',
+          tenantId,
+          'Group.Read.All',
+          groupTestResponse.status,
+          permissions.groupRead
+        );
       } catch {
         permissions.groupRead = null;
       }
 
       // Determine overall verification status
       const hasRequiredPermission = permissions.deviceManagementApps === true;
+
+      // Log final verification result
+      logPermissionVerification(
+        '/api/auth/verify-consent',
+        tenantId,
+        hasRequiredPermission,
+        permissions,
+        hasRequiredPermission ? undefined : 'insufficient_intune_permissions'
+      );
 
       if (!hasRequiredPermission && permissions.deviceManagementApps === false) {
         return { verified: false, error: 'insufficient_intune_permissions', permissions };
@@ -193,6 +241,14 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
         errorCode === 'unauthorized_client' ||
         errorDescription.includes('AADSTS700016') ||
         errorDescription.includes('AADSTS65001')) {
+      logPermissions({
+        route: '/api/auth/verify-consent',
+        action: 'consent_not_granted',
+        tenantId,
+        granted: false,
+        error: 'consent_not_granted',
+        details: { errorCode, errorDescription },
+      });
       return { verified: false, error: 'consent_not_granted' };
     }
 
