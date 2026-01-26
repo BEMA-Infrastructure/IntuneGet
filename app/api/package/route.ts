@@ -76,10 +76,25 @@ async function verifyTenantConsent(tenantId: string): Promise<ConsentVerifyResul
       return { verified: false, error: 'consent_not_granted' };
     }
 
-    // Token obtained - now test actual Intune API access
+    // Token obtained - first check roles claim for explicit permission verification
     const tokenData = await response.json();
     const accessToken = tokenData.access_token;
 
+    try {
+      const tokenPayload = JSON.parse(
+        Buffer.from(accessToken.split('.')[1], 'base64').toString()
+      );
+      const roles: string[] = tokenPayload.roles || [];
+
+      if (!roles.includes('DeviceManagementApps.ReadWrite.All')) {
+        console.error(`Deployment blocked: Token missing DeviceManagementApps.ReadWrite.All. Found: ${roles.join(', ')}`);
+        return { verified: false, error: 'insufficient_intune_permissions' };
+      }
+    } catch {
+      // Fall through to API test as backup
+    }
+
+    // Secondary validation: test actual Intune API access
     const intuneTestResponse = await fetch(
       'https://graph.microsoft.com/beta/deviceAppManagement/mobileApps?$top=1&$select=id',
       {

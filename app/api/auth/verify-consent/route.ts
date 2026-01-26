@@ -76,10 +76,38 @@ async function verifyConsentWithGraph(tenantId: string): Promise<GraphVerificati
       const tokenData = await response.json();
       const accessToken = tokenData.access_token;
 
+      // Decode token and check roles claim for explicit permission verification
+      let tokenRoles: string[] = [];
+      try {
+        const tokenPayload = JSON.parse(
+          Buffer.from(accessToken.split('.')[1], 'base64').toString()
+        );
+        tokenRoles = tokenPayload.roles || [];
+
+        // Check for the exact permission needed for Intune deployment
+        const hasIntuneWritePermission = tokenRoles.includes('DeviceManagementApps.ReadWrite.All');
+
+        if (!hasIntuneWritePermission) {
+          console.error(`Token roles missing DeviceManagementApps.ReadWrite.All. Found roles: ${tokenRoles.join(', ')}`);
+          return {
+            verified: false,
+            error: 'insufficient_intune_permissions',
+            permissions: {
+              deviceManagementApps: false,
+              userRead: true,
+              groupRead: tokenRoles.includes('Group.Read.All'),
+            },
+          };
+        }
+      } catch (tokenDecodeError) {
+        console.error('Failed to decode token roles:', tokenDecodeError);
+        // Fall through to API test as backup
+      }
+
       const permissions: PermissionStatus = {
         deviceManagementApps: null,
         userRead: true, // If we got a token, basic access works
-        groupRead: null,
+        groupRead: tokenRoles.includes('Group.Read.All') || null,
       };
 
       // Test DeviceManagementApps.ReadWrite.All permission

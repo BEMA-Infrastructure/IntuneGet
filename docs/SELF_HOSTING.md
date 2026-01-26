@@ -106,7 +106,6 @@ pm2 save
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | Plausible analytics domain | (disabled) |
-| `NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL` | Custom Plausible script URL | (disabled) |
 | `BEEHIIV_API_KEY` | Newsletter integration | (disabled) |
 
 ## Setup Steps

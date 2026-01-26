@@ -1,16 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { MicrosoftAuthProvider } from "@/components/providers/MicrosoftAuthProvider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { PlausibleProvider } from "@/components/providers/PlausibleProvider";
 import { MspProvider } from "@/contexts/MspContext";
 
 // Analytics configuration
 const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
-const PLAUSIBLE_SCRIPT_URL = process.env.NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL;
-const ANALYTICS_ENABLED = Boolean(PLAUSIBLE_DOMAIN && PLAUSIBLE_SCRIPT_URL);
+const ANALYTICS_ENABLED = Boolean(PLAUSIBLE_DOMAIN);
 
 const inter = Inter({
   subsets: ["latin"],
@@ -102,33 +101,29 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const content = (
+    <QueryProvider>
+      <MicrosoftAuthProvider>
+        <MspProvider>
+          {children}
+          <Toaster />
+        </MspProvider>
+      </MicrosoftAuthProvider>
+    </QueryProvider>
+  );
+
   return (
     <html lang="en">
-      <head>
-        {ANALYTICS_ENABLED && PLAUSIBLE_SCRIPT_URL && (
-          <>
-            <Script
-              src={PLAUSIBLE_SCRIPT_URL}
-              data-domain={PLAUSIBLE_DOMAIN}
-              strategy="afterInteractive"
-            />
-            <Script id="plausible-init" strategy="afterInteractive">
-              {`window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()`}
-            </Script>
-          </>
-        )}
-      </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
-        <QueryProvider>
-          <MicrosoftAuthProvider>
-            <MspProvider>
-              {children}
-              <Toaster />
-            </MspProvider>
-          </MicrosoftAuthProvider>
-        </QueryProvider>
+        {ANALYTICS_ENABLED && PLAUSIBLE_DOMAIN ? (
+          <PlausibleProvider domain={PLAUSIBLE_DOMAIN}>
+            {content}
+          </PlausibleProvider>
+        ) : (
+          content
+        )}
       </body>
     </html>
   );

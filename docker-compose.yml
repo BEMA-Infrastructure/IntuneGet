@@ -64,7 +64,6 @@ services:
       # Optional Features
       # ===========================================
       - NEXT_PUBLIC_PLAUSIBLE_DOMAIN=${NEXT_PUBLIC_PLAUSIBLE_DOMAIN:-}
-      - NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL=${NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL:-}
       - BEEHIIV_API_KEY=${BEEHIIV_API_KEY:-}
 
     volumes:

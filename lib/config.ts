@@ -52,7 +52,6 @@ export interface AppConfig {
   analytics: {
     enabled: boolean;
     plausibleDomain?: string;
-    plausibleScriptUrl?: string;
   };
 
   newsletter: {
@@ -133,7 +132,6 @@ export function getConfig(): AppConfig {
     analytics: {
       enabled: Boolean(getEnvVar("NEXT_PUBLIC_PLAUSIBLE_DOMAIN")),
       plausibleDomain: getEnvVar("NEXT_PUBLIC_PLAUSIBLE_DOMAIN"),
-      plausibleScriptUrl: getEnvVar("NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL"),
     },
 
     newsletter: {
