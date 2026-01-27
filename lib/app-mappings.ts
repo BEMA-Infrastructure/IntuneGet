@@ -496,3 +496,134 @@ export function getMappingByWingetId(wingetId: string): AppMapping | null {
     (m) => m.wingetId.toLowerCase() === wingetId.toLowerCase()
   ) || null;
 }
+
+/**
+ * Curated app result from database lookup
+ */
+export interface CuratedAppMatch {
+  wingetId: string;
+  name: string;
+  publisher: string;
+  latestVersion: string | null;
+}
+
+/**
+ * Search curated apps in the database
+ * Only returns apps that have been verified (have latest_version set)
+ */
+export async function searchCuratedApps(
+  searchTerm: string,
+  supabaseClient: { from: (table: string) => unknown }
+): Promise<CuratedAppMatch[]> {
+  if (!searchTerm || searchTerm.length < 2) {
+    return [];
+  }
+
+  const normalizedSearch = searchTerm.toLowerCase().trim();
+
+  try {
+    // Query curated_apps table for verified apps with latest_version
+    const { data, error } = await (supabaseClient.from('curated_apps') as {
+      select: (columns: string) => {
+        not: (column: string, operator: string, value: null) => {
+          or: (filter: string) => {
+            order: (column: string, options: { ascending: boolean; nullsFirst: boolean }) => {
+              limit: (count: number) => Promise<{ data: Array<{
+                winget_id: string;
+                name: string;
+                publisher: string;
+                latest_version: string | null;
+              }> | null; error: { message: string } | null }>;
+            };
+          };
+        };
+      };
+    })
+      .select('winget_id, name, publisher, latest_version')
+      .not('latest_version', 'is', null)
+      .or(`name.ilike.%${normalizedSearch}%,publisher.ilike.%${normalizedSearch}%,winget_id.ilike.%${normalizedSearch}%`)
+      .order('popularity_rank', { ascending: true, nullsFirst: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Error searching curated apps:', error.message);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    return data.map(app => ({
+      wingetId: app.winget_id,
+      name: app.name,
+      publisher: app.publisher,
+      latestVersion: app.latest_version,
+    }));
+  } catch (e) {
+    console.error('Failed to search curated apps:', e);
+    return [];
+  }
+}
+
+/**
+ * Find best match from curated apps for a given app name
+ */
+export function findBestCuratedMatch(
+  searchName: string,
+  searchPublisher: string | null,
+  curatedApps: CuratedAppMatch[]
+): CuratedAppMatch | null {
+  if (curatedApps.length === 0) {
+    return null;
+  }
+
+  const normalizedSearch = searchName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedPublisher = searchPublisher?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+
+  let bestMatch: CuratedAppMatch | null = null;
+  let bestScore = 0;
+
+  for (const app of curatedApps) {
+    let score = 0;
+    const normalizedName = app.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalizedAppPublisher = app.publisher.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Exact name match (highest priority)
+    if (normalizedName === normalizedSearch) {
+      score += 100;
+    }
+    // Name starts with search term
+    else if (normalizedName.startsWith(normalizedSearch)) {
+      score += 70;
+    }
+    // Name contains search term
+    else if (normalizedName.includes(normalizedSearch)) {
+      score += 50;
+    }
+    // Search term contains name
+    else if (normalizedSearch.includes(normalizedName)) {
+      score += 40;
+    }
+
+    // Publisher match
+    if (normalizedPublisher && normalizedAppPublisher === normalizedPublisher) {
+      score += 30;
+    } else if (normalizedPublisher && normalizedAppPublisher.includes(normalizedPublisher)) {
+      score += 15;
+    }
+
+    // Has version (verified app)
+    if (app.latestVersion) {
+      score += 10;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = app;
+    }
+  }
+
+  // Only return if confidence is high enough
+  return bestScore >= 50 ? bestMatch : null;
+}

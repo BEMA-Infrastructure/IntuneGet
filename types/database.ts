@@ -260,6 +260,8 @@ export interface Database {
           completed_at: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
+          is_auto_update: boolean;
+          auto_update_policy_id: string | null;
         };
         Insert: {
           id?: string;
@@ -300,6 +302,8 @@ export interface Database {
           completed_at?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          is_auto_update?: boolean;
+          auto_update_policy_id?: string | null;
         };
         Update: {
           id?: string;
@@ -340,6 +344,8 @@ export interface Database {
           completed_at?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          is_auto_update?: boolean;
+          auto_update_policy_id?: string | null;
         };
       };
       upload_history: {
@@ -535,6 +541,261 @@ export interface Database {
           updated_at?: string;
         };
       };
+      notification_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          email_enabled: boolean;
+          email_frequency: 'immediate' | 'daily' | 'weekly';
+          email_address: string | null;
+          notify_critical_only: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          email_enabled?: boolean;
+          email_frequency?: 'immediate' | 'daily' | 'weekly';
+          email_address?: string | null;
+          notify_critical_only?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          email_enabled?: boolean;
+          email_frequency?: 'immediate' | 'daily' | 'weekly';
+          email_address?: string | null;
+          notify_critical_only?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      webhook_configurations: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          url: string;
+          webhook_type: 'slack' | 'teams' | 'discord' | 'custom';
+          secret: string | null;
+          headers: Record<string, string>;
+          is_enabled: boolean;
+          failure_count: number;
+          last_failure_at: string | null;
+          last_success_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          url: string;
+          webhook_type: 'slack' | 'teams' | 'discord' | 'custom';
+          secret?: string | null;
+          headers?: Record<string, string>;
+          is_enabled?: boolean;
+          failure_count?: number;
+          last_failure_at?: string | null;
+          last_success_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          url?: string;
+          webhook_type?: 'slack' | 'teams' | 'discord' | 'custom';
+          secret?: string | null;
+          headers?: Record<string, string>;
+          is_enabled?: boolean;
+          failure_count?: number;
+          last_failure_at?: string | null;
+          last_success_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      notification_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          channel: 'email' | 'webhook';
+          webhook_id: string | null;
+          payload: Record<string, unknown>;
+          status: 'pending' | 'sent' | 'failed';
+          error_message: string | null;
+          apps_notified: number;
+          created_at: string;
+          sent_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          channel: 'email' | 'webhook';
+          webhook_id?: string | null;
+          payload: Record<string, unknown>;
+          status?: 'pending' | 'sent' | 'failed';
+          error_message?: string | null;
+          apps_notified?: number;
+          created_at?: string;
+          sent_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          channel?: 'email' | 'webhook';
+          webhook_id?: string | null;
+          payload?: Record<string, unknown>;
+          status?: 'pending' | 'sent' | 'failed';
+          error_message?: string | null;
+          apps_notified?: number;
+          created_at?: string;
+          sent_at?: string | null;
+          updated_at?: string;
+        };
+      };
+      update_check_results: {
+        Row: {
+          id: string;
+          user_id: string;
+          tenant_id: string;
+          winget_id: string;
+          intune_app_id: string;
+          display_name: string;
+          current_version: string;
+          latest_version: string;
+          is_critical: boolean;
+          notified_at: string | null;
+          dismissed_at: string | null;
+          detected_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          tenant_id: string;
+          winget_id: string;
+          intune_app_id: string;
+          display_name: string;
+          current_version: string;
+          latest_version: string;
+          is_critical?: boolean;
+          notified_at?: string | null;
+          dismissed_at?: string | null;
+          detected_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          tenant_id?: string;
+          winget_id?: string;
+          intune_app_id?: string;
+          display_name?: string;
+          current_version?: string;
+          latest_version?: string;
+          is_critical?: boolean;
+          notified_at?: string | null;
+          dismissed_at?: string | null;
+          detected_at?: string;
+          updated_at?: string;
+        };
+      };
+      app_update_policies: {
+        Row: {
+          id: string;
+          user_id: string;
+          tenant_id: string;
+          winget_id: string;
+          policy_type: 'auto_update' | 'notify' | 'ignore' | 'pin_version';
+          pinned_version: string | null;
+          deployment_config: Json | null;
+          original_upload_history_id: string | null;
+          last_auto_update_at: string | null;
+          last_auto_update_version: string | null;
+          is_enabled: boolean;
+          consecutive_failures: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          tenant_id: string;
+          winget_id: string;
+          policy_type?: 'auto_update' | 'notify' | 'ignore' | 'pin_version';
+          pinned_version?: string | null;
+          deployment_config?: Json | null;
+          original_upload_history_id?: string | null;
+          last_auto_update_at?: string | null;
+          last_auto_update_version?: string | null;
+          is_enabled?: boolean;
+          consecutive_failures?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          tenant_id?: string;
+          winget_id?: string;
+          policy_type?: 'auto_update' | 'notify' | 'ignore' | 'pin_version';
+          pinned_version?: string | null;
+          deployment_config?: Json | null;
+          original_upload_history_id?: string | null;
+          last_auto_update_at?: string | null;
+          last_auto_update_version?: string | null;
+          is_enabled?: boolean;
+          consecutive_failures?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      auto_update_history: {
+        Row: {
+          id: string;
+          policy_id: string;
+          packaging_job_id: string | null;
+          from_version: string;
+          to_version: string;
+          update_type: 'patch' | 'minor' | 'major';
+          status: 'pending' | 'packaging' | 'deploying' | 'completed' | 'failed' | 'cancelled';
+          error_message: string | null;
+          triggered_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          policy_id: string;
+          packaging_job_id?: string | null;
+          from_version: string;
+          to_version: string;
+          update_type: 'patch' | 'minor' | 'major';
+          status?: 'pending' | 'packaging' | 'deploying' | 'completed' | 'failed' | 'cancelled';
+          error_message?: string | null;
+          triggered_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          policy_id?: string;
+          packaging_job_id?: string | null;
+          from_version?: string;
+          to_version?: string;
+          update_type?: 'patch' | 'minor' | 'major';
+          status?: 'pending' | 'packaging' | 'deploying' | 'completed' | 'failed' | 'cancelled';
+          error_message?: string | null;
+          triggered_at?: string;
+          completed_at?: string | null;
+        };
+      };
     };
     Views: {
       msp_organization_stats: {
@@ -551,6 +812,33 @@ export interface Database {
           completed_jobs: number;
           created_at: string;
           updated_at: string;
+        };
+      };
+      notification_stats: {
+        Row: {
+          user_id: string;
+          email_enabled: boolean;
+          email_frequency: 'immediate' | 'daily' | 'weekly';
+          notify_critical_only: boolean;
+          active_webhooks: number;
+          pending_updates: number;
+          pending_critical_updates: number;
+          notifications_sent_30d: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      update_policy_stats: {
+        Row: {
+          user_id: string;
+          tenant_id: string;
+          total_policies: number;
+          auto_update_enabled: number;
+          notify_only: number;
+          ignored: number;
+          pinned: number;
+          successful_updates_30d: number;
+          failed_updates_30d: number;
         };
       };
     };

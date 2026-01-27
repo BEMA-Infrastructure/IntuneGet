@@ -1,0 +1,182 @@
+/**
+ * Webhooks API Routes
+ * GET - List user's webhook configurations
+ * POST - Create a new webhook configuration
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+import { parseAccessToken } from '@/lib/auth-utils';
+import { validateWebhookUrl, detectWebhookType } from '@/lib/webhooks/service';
+import type {
+  WebhookConfiguration,
+  WebhookConfigurationInput,
+} from '@/types/notifications';
+
+/**
+ * GET /api/webhooks
+ * List all webhook configurations for the user
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const user = parseAccessToken(request.headers.get('Authorization'));
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const supabase = createServerClient();
+
+    // Get user's webhook configurations
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: webhooks, error } = await (supabase as any)
+      .from('webhook_configurations')
+      .select('*')
+      .eq('user_id', user.userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching webhooks:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch webhooks' },
+        { status: 500 }
+      );
+    }
+
+    // Mask secrets in response
+    const sanitizedWebhooks = (webhooks || []).map((webhook: WebhookConfiguration) => ({
+      ...webhook,
+      secret: webhook.secret ? '********' : null,
+    }));
+
+    return NextResponse.json({ webhooks: sanitizedWebhooks });
+  } catch (error) {
+    console.error('Webhooks GET error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/webhooks
+ * Create a new webhook configuration
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const user = parseAccessToken(request.headers.get('Authorization'));
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Parse request body
+    const body: WebhookConfigurationInput = await request.json();
+
+    // Validate required fields
+    if (!body.name || body.name.trim().length < 1) {
+      return NextResponse.json(
+        { error: 'Webhook name is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!body.url) {
+      return NextResponse.json(
+        { error: 'Webhook URL is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate URL
+    const urlValidation = validateWebhookUrl(body.url);
+    if (!urlValidation.valid) {
+      return NextResponse.json(
+        { error: urlValidation.error || 'Invalid webhook URL' },
+        { status: 400 }
+      );
+    }
+
+    // Auto-detect webhook type if not provided
+    let webhookType = body.webhook_type;
+    if (!webhookType) {
+      webhookType = detectWebhookType(body.url) || 'custom';
+    }
+
+    // Validate webhook type
+    if (!['slack', 'teams', 'discord', 'custom'].includes(webhookType)) {
+      return NextResponse.json(
+        { error: 'Invalid webhook type' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServerClient();
+
+    // Check webhook limit (max 10 per user)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count, error: countError } = await (supabase as any)
+      .from('webhook_configurations')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.userId);
+
+    if (countError) {
+      console.error('Error counting webhooks:', countError);
+      return NextResponse.json(
+        { error: 'Failed to create webhook' },
+        { status: 500 }
+      );
+    }
+
+    if (count !== null && count >= 10) {
+      return NextResponse.json(
+        { error: 'Maximum of 10 webhooks allowed per user' },
+        { status: 400 }
+      );
+    }
+
+    // Create webhook
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: webhook, error } = await (supabase as any)
+      .from('webhook_configurations')
+      .insert({
+        user_id: user.userId,
+        name: body.name.trim(),
+        url: body.url,
+        webhook_type: webhookType,
+        secret: body.secret || null,
+        headers: body.headers || {},
+        is_enabled: body.is_enabled ?? true,
+        failure_count: 0,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating webhook:', error);
+      return NextResponse.json(
+        { error: 'Failed to create webhook' },
+        { status: 500 }
+      );
+    }
+
+    // Mask secret in response
+    const sanitizedWebhook = {
+      ...webhook,
+      secret: webhook.secret ? '********' : null,
+    };
+
+    return NextResponse.json({ webhook: sanitizedWebhook }, { status: 201 });
+  } catch (error) {
+    console.error('Webhooks POST error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

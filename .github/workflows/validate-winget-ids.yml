@@ -1,0 +1,552 @@
+name: Validate Winget IDs
+
+on:
+  schedule:
+    # Run weekly on Monday at 01:00 UTC (before sync-manifests at 02:00)
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Validation mode'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - validate    # Check existing IDs only
+          - discover    # Search for correct IDs for failed validations
+          - both        # Validate then discover
+      limit:
+        description: 'Max apps to process (0 = all)'
+        required: false
+        default: '200'
+      priority:
+        description: 'Which apps to prioritize'
+        required: true
+        default: 'unverified'
+        type: choice
+        options:
+          - unverified  # Apps without is_winget_verified = true
+          - no_version  # Apps without latest_version
+          - all         # All apps by popularity
+
+# Prevent concurrent runs - part of curated-apps pipeline
+concurrency:
+  group: curated-apps-pipeline
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Winget
+        shell: pwsh
+        run: |
+          # Check if winget is available
+          $winget = Get-Command winget -ErrorAction SilentlyContinue
+
+          if (-not $winget) {
+            Write-Host "Installing WinGet..."
+            $progressPreference = 'SilentlyContinue'
+            $url = "https://aka.ms/getwinget"
+            $installerPath = "$env:TEMP\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+            Invoke-WebRequest -Uri $url -OutFile $installerPath
+            Add-AppxPackage -Path $installerPath
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          }
+
+          winget --version
+
+      - name: Fetch apps from Supabase
+        id: fetch
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LIMIT: ${{ github.event.inputs.limit || '200' }}
+          PRIORITY: ${{ github.event.inputs.priority || 'unverified' }}
+        shell: bash
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+          const { createClient } = require('@supabase/supabase-js');
+
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+          const limit = parseInt(process.env.LIMIT || '200', 10);
+          const priority = process.env.PRIORITY || 'unverified';
+
+          if (!supabaseUrl || !supabaseKey) {
+            console.error('Supabase credentials not configured');
+            process.exit(1);
+          }
+
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          async function fetchApps() {
+            let query = supabase
+              .from('curated_apps')
+              .select('id, winget_id, name, publisher, latest_version, is_winget_verified')
+              .order('popularity_rank', { ascending: true });
+
+            // Apply priority filter
+            if (priority === 'unverified') {
+              // Apps not yet verified by winget
+              query = query.or('is_winget_verified.is.null,is_winget_verified.eq.false');
+            } else if (priority === 'no_version') {
+              // Apps without latest_version (likely invalid winget IDs)
+              query = query.is('latest_version', null);
+            }
+            // 'all' - no additional filter
+
+            if (limit > 0) {
+              query = query.limit(limit);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error('Failed to fetch apps:', error.message);
+              process.exit(1);
+            }
+
+            console.log(`Fetched ${data.length} apps to validate`);
+            fs.writeFileSync('apps-to-validate.json', JSON.stringify(data, null, 2));
+
+            // Output count for GitHub Actions
+            const outputFile = process.env.GITHUB_OUTPUT;
+            if (outputFile) {
+              fs.appendFileSync(outputFile, `app_count=${data.length}\n`);
+            }
+          }
+
+          fetchApps().catch(err => {
+            console.error('Fetch failed:', err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Validate and Discover IDs
+        if: steps.fetch.outputs.app_count != '0'
+        id: validate
+        env:
+          MODE: ${{ github.event.inputs.mode || 'both' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $mode = $env:MODE
+
+          # Helper function to parse winget search output
+          function Parse-WingetSearch {
+            param([string]$Output)
+
+            $results = @()
+            $lines = $Output -split "`n"
+            $headerFound = $false
+            $nameCol = 0
+            $idCol = 0
+            $versionCol = 0
+            $sourceCol = 0
+
+            foreach ($line in $lines) {
+              # Skip empty lines
+              if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+              # Find header line (contains "Name" and "Id")
+              if (-not $headerFound -and $line -match 'Name\s+Id') {
+                $headerFound = $true
+                # Determine column positions from header
+                $nameCol = $line.IndexOf('Name')
+                $idCol = $line.IndexOf('Id')
+                $versionCol = $line.IndexOf('Version')
+                $sourceCol = $line.IndexOf('Source')
+                continue
+              }
+
+              # Skip separator line (dashes)
+              if ($line -match '^-+$' -or $line -match '^-+\s+-+') { continue }
+
+              # Parse data rows
+              if ($headerFound -and $line.Length -gt $idCol) {
+                try {
+                  # Extract fields based on column positions
+                  $name = $line.Substring($nameCol, [Math]::Min($idCol - $nameCol, $line.Length - $nameCol)).Trim()
+
+                  $idEnd = if ($versionCol -gt 0) { $versionCol } else { $line.Length }
+                  $id = $line.Substring($idCol, [Math]::Min($idEnd - $idCol, $line.Length - $idCol)).Trim()
+
+                  $version = ""
+                  $source = "winget"
+
+                  if ($versionCol -gt 0 -and $line.Length -gt $versionCol) {
+                    $verEnd = if ($sourceCol -gt 0) { $sourceCol } else { $line.Length }
+                    $version = $line.Substring($versionCol, [Math]::Min($verEnd - $versionCol, $line.Length - $versionCol)).Trim()
+                  }
+
+                  if ($sourceCol -gt 0 -and $line.Length -gt $sourceCol) {
+                    $source = $line.Substring($sourceCol).Trim()
+                  }
+
+                  # Validate ID format (Publisher.Name)
+                  if ($id -match '^[A-Za-z0-9]+\.[A-Za-z0-9]') {
+                    $results += @{
+                      Name = $name
+                      Id = $id
+                      Version = $version
+                      Source = $source
+                    }
+                  }
+                } catch {
+                  # Skip malformed lines
+                }
+              }
+            }
+
+            return $results
+          }
+
+          # Helper function to find best match from search results
+          function Get-BestMatch {
+            param(
+              [string]$AppName,
+              [string]$Publisher,
+              [array]$SearchResults
+            )
+
+            $bestScore = 0
+            $bestMatch = $null
+
+            foreach ($result in $SearchResults) {
+              $score = 0
+              $resultName = $result.Name.ToLower()
+              $resultId = $result.Id.ToLower()
+              $searchName = $AppName.ToLower()
+              $searchPublisher = if ($Publisher) { $Publisher.ToLower() } else { "" }
+
+              # 1. Exact name match (highest priority)
+              if ($resultName -eq $searchName) {
+                $score += 100
+              }
+              # 2. Name starts with search term
+              elseif ($resultName.StartsWith($searchName)) {
+                $score += 70
+              }
+              # 3. Name contains search term
+              elseif ($resultName -like "*$searchName*") {
+                $score += 50
+              }
+
+              # 4. ID contains name (normalized)
+              $normalizedName = $searchName -replace '[^a-z0-9]', ''
+              $normalizedId = $resultId -replace '[^a-z0-9]', ''
+              if ($normalizedId -like "*$normalizedName*") {
+                $score += 30
+              }
+
+              # 5. Publisher match in ID
+              if ($searchPublisher -and $resultId -like "$searchPublisher.*") {
+                $score += 40
+              }
+
+              # 6. Prefer 'winget' source
+              if ($result.Source -eq 'winget') {
+                $score += 10
+              }
+
+              # 7. Prefer shorter IDs (more canonical)
+              $idParts = $result.Id.Split('.').Count
+              if ($idParts -eq 2) { $score += 5 }
+
+              if ($score -gt $bestScore) {
+                $bestScore = $score
+                $bestMatch = $result
+              }
+            }
+
+            # Only return if confidence is high enough
+            if ($bestScore -ge 50) {
+              return @{
+                Id = $bestMatch.Id
+                Score = $bestScore
+                Name = $bestMatch.Name
+                Version = $bestMatch.Version
+              }
+            }
+            return $null
+          }
+
+          # Load apps to validate
+          $apps = Get-Content "apps-to-validate.json" | ConvertFrom-Json
+          $results = @()
+          $validated = 0
+          $discovered = 0
+          $failed = 0
+
+          Write-Host "Processing $($apps.Count) apps in mode: $mode"
+          Write-Host ""
+
+          foreach ($app in $apps) {
+            $wingetId = $app.winget_id
+            $result = @{
+              id = $app.id
+              winget_id = $wingetId
+              original_winget_id = $wingetId
+              name = $app.name
+              publisher = $app.publisher
+              is_valid = $false
+              discovered_id = $null
+              match_score = 0
+              error = $null
+            }
+
+            Write-Host "[$($apps.IndexOf($app) + 1)/$($apps.Count)] Checking: $wingetId"
+
+            try {
+              # Step 1: Validate existing ID (if mode includes validation)
+              if ($mode -eq 'validate' -or $mode -eq 'both') {
+                $showOutput = winget show --id $wingetId --accept-source-agreements 2>&1 | Out-String
+
+                if ($LASTEXITCODE -eq 0 -and $showOutput -notmatch 'No package found') {
+                  $result.is_valid = $true
+                  $validated++
+                  Write-Host "  VALID" -ForegroundColor Green
+                } else {
+                  Write-Host "  INVALID - ID not found in winget" -ForegroundColor Yellow
+                }
+              }
+
+              # Step 2: Search for correct ID (if mode includes discovery and ID is invalid)
+              if ((-not $result.is_valid) -and ($mode -eq 'discover' -or $mode -eq 'both')) {
+                Write-Host "  Searching for '$($app.name)'..."
+
+                # Try searching by name
+                $searchOutput = winget search --name "$($app.name)" --accept-source-agreements 2>&1 | Out-String
+                $searchResults = Parse-WingetSearch $searchOutput
+
+                if ($searchResults.Count -eq 0) {
+                  # Try broader search
+                  $searchOutput = winget search "$($app.name)" --accept-source-agreements 2>&1 | Out-String
+                  $searchResults = Parse-WingetSearch $searchOutput
+                }
+
+                if ($searchResults.Count -gt 0) {
+                  Write-Host "  Found $($searchResults.Count) potential matches"
+
+                  $match = Get-BestMatch -AppName $app.name -Publisher $app.publisher -SearchResults $searchResults
+
+                  if ($match) {
+                    $result.discovered_id = $match.Id
+                    $result.match_score = $match.Score
+                    $discovered++
+                    Write-Host "  DISCOVERED: $($match.Id) (score: $($match.Score))" -ForegroundColor Cyan
+                  } else {
+                    Write-Host "  No confident match found" -ForegroundColor Yellow
+                    $failed++
+                  }
+                } else {
+                  Write-Host "  No search results found" -ForegroundColor Yellow
+                  $failed++
+                }
+              }
+            } catch {
+              $result.error = $_.ToString()
+              Write-Warning "Error processing $wingetId : $_"
+              $failed++
+            }
+
+            $results += $result
+
+            # Rate limiting to avoid overwhelming winget
+            Start-Sleep -Milliseconds 500
+          }
+
+          Write-Host ""
+          Write-Host "=== Summary ===" -ForegroundColor Cyan
+          Write-Host "Validated (existing ID works): $validated"
+          Write-Host "Discovered (found correct ID): $discovered"
+          Write-Host "Failed (no match found): $failed"
+
+          # Save results
+          $results | ConvertTo-Json -Depth 10 | Out-File "validation-results.json" -Encoding UTF8
+
+          # Set outputs
+          echo "validated=$validated" >> $env:GITHUB_OUTPUT
+          echo "discovered=$discovered" >> $env:GITHUB_OUTPUT
+          echo "failed=$failed" >> $env:GITHUB_OUTPUT
+
+      - name: Update Supabase with results
+        if: steps.fetch.outputs.app_count != '0'
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        shell: bash
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+          const { createClient } = require('@supabase/supabase-js');
+
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+          if (!supabaseUrl || !supabaseKey) {
+            console.error('Supabase credentials not configured');
+            process.exit(1);
+          }
+
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          async function updateResults() {
+            const results = JSON.parse(fs.readFileSync('validation-results.json', 'utf8'));
+
+            let updated = 0;
+            let corrected = 0;
+            let errors = 0;
+            const validatedIds = [];
+
+            for (const result of results) {
+              try {
+                if (result.is_valid) {
+                  // Mark as verified
+                  const { error } = await supabase
+                    .from('curated_apps')
+                    .update({
+                      is_winget_verified: true,
+                      winget_verified_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', result.id);
+
+                  if (error) {
+                    console.error(`Failed to update ${result.winget_id}:`, error.message);
+                    errors++;
+                  } else {
+                    updated++;
+                    validatedIds.push(result.winget_id);
+                  }
+                } else if (result.discovered_id) {
+                  // Update with corrected ID and mark as verified
+                  const { error } = await supabase
+                    .from('curated_apps')
+                    .update({
+                      winget_id: result.discovered_id,
+                      is_winget_verified: true,
+                      winget_verified_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', result.id);
+
+                  if (error) {
+                    console.error(`Failed to correct ${result.winget_id} -> ${result.discovered_id}:`, error.message);
+                    errors++;
+                  } else {
+                    corrected++;
+                    validatedIds.push(result.discovered_id);
+                    console.log(`Corrected: ${result.original_winget_id} -> ${result.discovered_id}`);
+                  }
+                }
+              } catch (e) {
+                console.error(`Error updating ${result.winget_id}:`, e.message);
+                errors++;
+              }
+            }
+
+            // Update sync status
+            await supabase.from('curated_sync_status').upsert({
+              id: 'validate-winget-ids',
+              last_run_completed_at: new Date().toISOString(),
+              last_run_status: errors > 0 && updated + corrected === 0 ? 'failed' : 'success',
+              items_processed: updated + corrected,
+              error_message: errors > 0 ? `${errors} updates failed` : null,
+              metadata: {
+                validated: updated,
+                corrected: corrected,
+                errors: errors,
+                total_processed: results.length
+              },
+              updated_at: new Date().toISOString()
+            });
+
+            console.log(`\nDatabase updates complete:`);
+            console.log(`  - Validated: ${updated}`);
+            console.log(`  - Corrected: ${corrected}`);
+            console.log(`  - Errors: ${errors}`);
+
+            // Save validated IDs for triggering sync-manifests
+            fs.writeFileSync('validated-ids.json', JSON.stringify(validatedIds));
+          }
+
+          updateResults().catch(err => {
+            console.error('Update failed:', err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Trigger sync-manifests workflow
+        if: success() && steps.fetch.outputs.app_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if [ -f validated-ids.json ]; then
+            VALIDATED_COUNT=$(jq 'length' validated-ids.json)
+
+            if [ "$VALIDATED_COUNT" -gt 0 ]; then
+              # Get comma-separated list of validated IDs (limit to first 50 for workflow input)
+              VALIDATED_IDS=$(jq -r '.[0:50] | join(",")' validated-ids.json)
+
+              echo "Triggering sync-manifests for $VALIDATED_COUNT validated apps..."
+
+              gh workflow run sync-manifests.yml \
+                -f app_ids="$VALIDATED_IDS" \
+                -f limit="50" || echo "Failed to trigger sync-manifests workflow"
+            else
+              echo "No validated IDs to sync"
+            fi
+          fi
+
+      - name: Create summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Winget ID Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f validation-results.json ]; then
+            TOTAL=$(jq 'length' validation-results.json)
+            VALID=$(jq '[.[] | select(.is_valid == true)] | length' validation-results.json)
+            DISCOVERED=$(jq '[.[] | select(.discovered_id != null)] | length' validation-results.json)
+            FAILED=$((TOTAL - VALID - DISCOVERED))
+
+            echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Processed | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Valid (existing ID works) | $VALID |" >> $GITHUB_STEP_SUMMARY
+            echo "| Discovered (corrected ID) | $DISCOVERED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed (no match) | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$DISCOVERED" -gt 0 ]; then
+              echo "### Corrected IDs" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Original ID | Corrected ID | Score |" >> $GITHUB_STEP_SUMMARY
+              echo "|-------------|--------------|-------|" >> $GITHUB_STEP_SUMMARY
+              jq -r '.[] | select(.discovered_id != null) | "| \(.original_winget_id) | \(.discovered_id) | \(.match_score) |"' validation-results.json >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "No validation results found" >> $GITHUB_STEP_SUMMARY
+          fi

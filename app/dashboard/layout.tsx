@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Loader2,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cart-store';
@@ -40,6 +41,7 @@ const navigation: NavItem[] = [
   { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { name: 'App Catalog', href: '/dashboard/apps', icon: Package },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Server, badge: 'update' },
+  { name: 'Updates', href: '/dashboard/updates', icon: ArrowUpCircle },
   { name: 'Uploads', href: '/dashboard/uploads', icon: Upload },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
   { name: 'MSP', href: '/dashboard/msp', icon: Building2 },
