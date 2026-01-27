@@ -388,7 +388,7 @@ jobs:
                   "Content-Type" = "application/json"
                 } `
                 -Body $body `
-                -TimeoutSec 30
+                -TimeoutSec 90
 
               # Responses API returns output_text for the final text response
               $answer = $response.output_text.Trim()
