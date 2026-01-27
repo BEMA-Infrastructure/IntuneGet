@@ -344,7 +344,7 @@ jobs:
             return $null
           }
 
-          # Helper function to query OpenAI with web search for winget ID
+          # Helper function to query OpenAI Chat Completions API for winget ID
           function Get-WingetIdFromOpenAI {
             param(
               [string]$AppName,
@@ -359,69 +359,54 @@ jobs:
             }
 
             try {
-              $prompt = "Search the web to find the CORRECT winget package ID for this Windows application:`n`n" +
-                "App: $AppName`n" +
-                "Publisher: $Publisher`n" +
-                "Invalid/Expected ID: $ExistingWingetId (THIS ID IS WRONG - do NOT return it)`n`n" +
-                "SEARCH STRATEGY:`n" +
-                "1. Search for `"$AppName winget id`" or `"$AppName winget install`"`n" +
-                "2. Check these reliable sources:`n" +
-                "   - winget.run (package database)`n" +
-                "   - winstall.app (package search)`n" +
-                "   - github.com/microsoft/winget-pkgs (official repository)`n`n" +
-                "IMPORTANT: The ID '$ExistingWingetId' does NOT exist in winget. You must find a DIFFERENT, valid ID.`n`n" +
-                "RULES:`n" +
-                "- Winget IDs follow the format: Publisher.AppName (e.g., Microsoft.VisualStudioCode)`n" +
-                "- For Visual Studio, the correct IDs are like: Microsoft.VisualStudio.2022.Community`n" +
-                "- If multiple editions exist (Community/Pro/Enterprise), prefer the free/Community edition`n" +
-                "- NEVER return the invalid ID shown above`n`n" +
-                "RESPONSE FORMAT:`n" +
-                "- Return ONLY the winget ID (e.g., Microsoft.VisualStudio.2022.Community)`n" +
-                "- Return NOT_AVAILABLE only if the app is definitely not in winget`n" +
-                "- Return UNKNOWN only if no information found at all"
+              $prompt = "What is the correct winget package ID for:`n" +
+                "- App: $AppName`n" +
+                "- Publisher: $Publisher`n" +
+                "- Invalid ID: $ExistingWingetId (this ID does not exist in winget)`n`n" +
+                "Rules:`n" +
+                "- Winget IDs use format: Publisher.AppName (e.g., Microsoft.VisualStudioCode)`n" +
+                "- For Visual Studio: Microsoft.VisualStudio.2022.Community/Professional/Enterprise`n" +
+                "- Prefer Community/free editions when multiple exist`n" +
+                "- Do NOT return the invalid ID shown above`n`n" +
+                "Return ONLY one of:`n" +
+                "- The correct winget ID (e.g., Microsoft.VisualStudio.2022.Community)`n" +
+                "- NOT_AVAILABLE if the app is not in winget`n" +
+                "- UNKNOWN if you cannot determine the ID"
 
               $body = @{
-                model = "gpt-5-nano"
-                tools = @(
+                model = "gpt-4o-mini"
+                messages = @(
                   @{
-                    type = "web_search"
+                    role = "system"
+                    content = "You are a winget package ID expert. You know common Windows application winget IDs. Return ONLY the winget ID, NOT_AVAILABLE, or UNKNOWN. No explanations."
+                  },
+                  @{
+                    role = "user"
+                    content = $prompt
                   }
                 )
-                input = $prompt
+                max_tokens = 100
+                temperature = 0
               } | ConvertTo-Json -Depth 10
 
-              $response = Invoke-RestMethod -Uri "https://api.openai.com/v1/responses" `
+              $response = Invoke-RestMethod -Uri "https://api.openai.com/v1/chat/completions" `
                 -Method Post `
                 -Headers @{
                   "Authorization" = "Bearer $apiKey"
                   "Content-Type" = "application/json"
                 } `
                 -Body $body `
-                -TimeoutSec 300
+                -TimeoutSec 60
 
-              # Extract text from response - handle both string and object types
-              $answer = $null
-
-              # Try different response properties
-              $textValue = $response.text
-              if (-not $textValue) { $textValue = $response.output_text }
-
-              if ($textValue) {
-                # Handle if it's a string
-                if ($textValue -is [string]) {
-                  $answer = $textValue.Trim()
-                }
-                # Handle if it's an object - convert to string
-                else {
-                  $answer = [string]$textValue
-                  if ($answer) { $answer = $answer.Trim() }
-                }
+              # Extract text from Chat Completions response
+              $answer = $response.choices[0].message.content
+              if ($answer) {
+                $answer = $answer.Trim()
               }
 
               if (-not $answer) {
                 Write-Host "    Could not extract text from API response" -ForegroundColor Yellow
-                Write-Host "    Response text type: $($response.text.GetType().Name)" -ForegroundColor Gray
-                Write-Host "    Response: $($response | ConvertTo-Json -Depth 2 -Compress)" -ForegroundColor Gray
+                Write-Host "    Response: $($response | ConvertTo-Json -Depth 3 -Compress)" -ForegroundColor Gray
                 return @{ Status = "UNKNOWN"; Id = $null }
               }
 
