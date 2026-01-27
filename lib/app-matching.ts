@@ -3,7 +3,14 @@
  * Multi-pass matching between Intune apps and Winget packages
  */
 
-import { getWingetIdFromName, getMappingByWingetId, APP_MAPPINGS } from './app-mappings';
+import {
+  getWingetIdFromName,
+  getMappingByWingetId,
+  APP_MAPPINGS,
+  searchCuratedApps,
+  findBestCuratedMatch,
+  type CuratedAppMatch,
+} from './app-mappings';
 import type { IntuneWin32App } from '@/types/inventory';
 
 export interface MatchResult {
@@ -45,18 +52,19 @@ export function isValidWingetId(id: string): boolean {
 }
 
 /**
- * Match Intune app to Winget package
+ * Match Intune app to Winget package (synchronous version)
  * Uses multi-pass matching algorithm:
  * 1. Known mappings lookup
  * 2. Winget ID pattern extraction
- * 3. Exact name match
+ * 3. Hardcoded mappings name match
  * 4. Publisher + partial name match
+ *
+ * Note: For database lookup, use matchAppToWingetWithDatabase instead
  */
 export function matchAppToWinget(app: IntuneWin32App): MatchResult | null {
   const displayName = app.displayName;
   const publisher = app.publisher || '';
   const normalizedName = normalizeString(displayName);
-  const normalizedPublisher = normalizeString(publisher);
 
   // Pass 1: Known mappings lookup
   const mappedWingetId = getWingetIdFromName(displayName);
@@ -122,6 +130,104 @@ export function matchAppToWinget(app: IntuneWin32App): MatchResult | null {
 }
 
 /**
+ * Match Intune app to Winget package with database lookup
+ * Enhanced matching algorithm that includes curated apps database:
+ * 1. Known mappings lookup (instant, hardcoded)
+ * 2. Winget ID pattern extraction
+ * 3. Database lookup (verified curated apps with latest_version)
+ * 4. Hardcoded mappings name match
+ * 5. Publisher + partial name match
+ */
+export async function matchAppToWingetWithDatabase(
+  app: IntuneWin32App,
+  supabaseClient: { from: (table: string) => unknown }
+): Promise<MatchResult | null> {
+  const displayName = app.displayName;
+  const publisher = app.publisher || '';
+  const normalizedName = normalizeString(displayName);
+
+  // Pass 1: Known mappings lookup (instant, no DB call needed)
+  const mappedWingetId = getWingetIdFromName(displayName);
+  if (mappedWingetId) {
+    return {
+      confidence: 'high',
+      wingetId: mappedWingetId,
+      matchReason: 'Known app mapping',
+    };
+  }
+
+  // Pass 2: Winget ID pattern in name
+  const extractedId = extractWingetIdPattern(displayName);
+  if (extractedId) {
+    return {
+      confidence: 'high',
+      wingetId: extractedId,
+      matchReason: 'Winget ID pattern found in name',
+    };
+  }
+
+  // Pass 3: Database lookup for verified curated apps
+  try {
+    const curatedApps = await searchCuratedApps(displayName, supabaseClient);
+    if (curatedApps.length > 0) {
+      const bestMatch = findBestCuratedMatch(displayName, publisher, curatedApps);
+      if (bestMatch) {
+        return {
+          confidence: 'high',
+          wingetId: bestMatch.wingetId,
+          matchReason: 'Curated apps database match',
+        };
+      }
+    }
+  } catch (e) {
+    // Database lookup failed, continue with other passes
+    console.warn('Database lookup failed during app matching:', e);
+  }
+
+  // Pass 4: Check if display name contains a known Winget ID
+  for (const mapping of APP_MAPPINGS) {
+    const normalizedId = normalizeString(mapping.wingetId.split('.').join(''));
+    if (normalizedName.includes(normalizedId)) {
+      return {
+        confidence: 'medium',
+        wingetId: mapping.wingetId,
+        matchReason: 'Name contains Winget ID',
+      };
+    }
+  }
+
+  // Pass 5: Publisher + name combination
+  if (publisher) {
+    const combinedName = `${publisher}.${displayName.replace(/\s+/g, '')}`;
+    const normalizedCombined = normalizeString(combinedName);
+
+    for (const mapping of APP_MAPPINGS) {
+      const normalizedMappingId = normalizeString(mapping.wingetId);
+      if (normalizedCombined.includes(normalizedMappingId) ||
+          normalizedMappingId.includes(normalizedCombined)) {
+        return {
+          confidence: 'medium',
+          wingetId: mapping.wingetId,
+          matchReason: 'Publisher and name combination match',
+        };
+      }
+    }
+
+    // Generate a potential Winget ID from publisher and name
+    const potentialId = generatePotentialWingetId(publisher, displayName);
+    if (potentialId) {
+      return {
+        confidence: 'low',
+        wingetId: potentialId,
+        matchReason: 'Generated from publisher and name',
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Generate a potential Winget ID from publisher and app name
  */
 function generatePotentialWingetId(publisher: string, name: string): string | null {
@@ -147,7 +253,7 @@ function generatePotentialWingetId(publisher: string, name: string): string | nu
 }
 
 /**
- * Get all apps that could have updates
+ * Get all apps that could have updates (synchronous version)
  */
 export function getAppsWithPotentialUpdates(apps: IntuneWin32App[]): {
   app: IntuneWin32App;
@@ -159,6 +265,44 @@ export function getAppsWithPotentialUpdates(apps: IntuneWin32App[]): {
     const match = matchAppToWinget(app);
     if (match) {
       results.push({ app, match });
+    }
+  }
+
+  // Sort by confidence (high first)
+  const confidenceOrder = { high: 0, medium: 1, low: 2 };
+  results.sort((a, b) => confidenceOrder[a.match.confidence] - confidenceOrder[b.match.confidence]);
+
+  return results;
+}
+
+/**
+ * Get all apps that could have updates with database lookup
+ * Uses the enhanced matching algorithm that includes curated apps database
+ */
+export async function getAppsWithPotentialUpdatesFromDatabase(
+  apps: IntuneWin32App[],
+  supabaseClient: { from: (table: string) => unknown }
+): Promise<{
+  app: IntuneWin32App;
+  match: MatchResult;
+}[]> {
+  const results: { app: IntuneWin32App; match: MatchResult }[] = [];
+
+  // Process apps in parallel batches for better performance
+  const batchSize = 10;
+  for (let i = 0; i < apps.length; i += batchSize) {
+    const batch = apps.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(async (app) => {
+        const match = await matchAppToWingetWithDatabase(app, supabaseClient);
+        return match ? { app, match } : null;
+      })
+    );
+
+    for (const result of batchResults) {
+      if (result) {
+        results.push(result);
+      }
     }
   }
 
