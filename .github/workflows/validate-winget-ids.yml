@@ -344,7 +344,7 @@ jobs:
             return $null
           }
 
-          # Helper function to query OpenAI Chat Completions API for winget ID
+          # Helper function to query OpenAI Responses API with web search for winget ID
           function Get-WingetIdFromOpenAI {
             param(
               [string]$AppName,
@@ -359,10 +359,11 @@ jobs:
             }
 
             try {
-              $prompt = "What is the correct winget package ID for:`n" +
+              $prompt = "Search the web to find the correct winget package ID for:`n" +
                 "- App: $AppName`n" +
                 "- Publisher: $Publisher`n" +
                 "- Invalid ID: $ExistingWingetId (this ID does not exist in winget)`n`n" +
+                "Search winget.run, winstall.app, or github.com/microsoft/winget-pkgs for the correct ID.`n`n" +
                 "Rules:`n" +
                 "- Winget IDs use format: Publisher.AppName (e.g., Microsoft.VisualStudioCode)`n" +
                 "- For Visual Studio: Microsoft.VisualStudio.2022.Community/Professional/Enterprise`n" +
@@ -370,51 +371,63 @@ jobs:
                 "- Do NOT return the invalid ID shown above`n`n" +
                 "Return ONLY one of:`n" +
                 "- The correct winget ID (e.g., Microsoft.VisualStudio.2022.Community)`n" +
-                "- NOT_AVAILABLE if the app is not in winget`n" +
+                "- NOT_AVAILABLE if the app is confirmed not in winget`n" +
                 "- UNKNOWN if you cannot determine the ID"
 
               $body = @{
-                model = "gpt-4o-mini"
-                messages = @(
+                model = "gpt-5-nano"
+                instructions = "You are a winget package ID expert. Use web search to find correct winget IDs. Return ONLY the winget ID, NOT_AVAILABLE, or UNKNOWN. No explanations."
+                input = $prompt
+                tools = @(
                   @{
-                    role = "system"
-                    content = "You are a winget package ID expert. You know common Windows application winget IDs. Return ONLY the winget ID, NOT_AVAILABLE, or UNKNOWN. No explanations."
-                  },
-                  @{
-                    role = "user"
-                    content = $prompt
+                    type = "web_search"
                   }
                 )
-                max_tokens = 100
-                temperature = 0
               } | ConvertTo-Json -Depth 10
 
-              $response = Invoke-RestMethod -Uri "https://api.openai.com/v1/chat/completions" `
+              $response = Invoke-RestMethod -Uri "https://api.openai.com/v1/responses" `
                 -Method Post `
                 -Headers @{
                   "Authorization" = "Bearer $apiKey"
                   "Content-Type" = "application/json"
                 } `
                 -Body $body `
-                -TimeoutSec 60
+                -TimeoutSec 120
 
-              # Extract text from Chat Completions response
-              $answer = $response.choices[0].message.content
-              if ($answer) {
-                $answer = $answer.Trim()
+              # Extract text from Responses API - find message in output array
+              $answer = $null
+              if ($response.output -and $response.output.Count -gt 0) {
+                foreach ($item in $response.output) {
+                  if ($item.type -eq "message" -and $item.content) {
+                    foreach ($contentItem in $item.content) {
+                      if ($contentItem.type -eq "output_text" -and $contentItem.text) {
+                        $answer = $contentItem.text.Trim()
+                        break
+                      }
+                    }
+                  }
+                  if ($answer) { break }
+                }
               }
 
               if (-not $answer) {
                 Write-Host "    Could not extract text from API response" -ForegroundColor Yellow
-                Write-Host "    Response: $($response | ConvertTo-Json -Depth 3 -Compress)" -ForegroundColor Gray
+                Write-Host "    Response: $($response | ConvertTo-Json -Depth 5 -Compress)" -ForegroundColor Gray
                 return @{ Status = "UNKNOWN"; Id = $null }
               }
 
-              Write-Host "    API returned: $answer" -ForegroundColor Gray
+              # Clean up answer - extract just the ID if there's extra text
+              if ($answer -match '([A-Za-z0-9_-]+\.[A-Za-z0-9._-]+)') {
+                $extractedId = $Matches[1]
+                Write-Host "    API returned: $extractedId" -ForegroundColor Gray
+                $answer = $extractedId
+              } else {
+                Write-Host "    API returned: $answer" -ForegroundColor Gray
+              }
 
               # Validate the response format
-              if ($answer -eq "NOT_AVAILABLE" -or $answer -eq "UNKNOWN") {
-                return @{ Status = $answer; Id = $null }
+              if ($answer -eq "NOT_AVAILABLE" -or $answer -eq "UNKNOWN" -or $answer -match "NOT_AVAILABLE|not available|UNKNOWN") {
+                return @{ Status = "NOT_AVAILABLE"; Id = $null }
               }
 
               # Check if it looks like a valid winget ID (Publisher.Name format)
