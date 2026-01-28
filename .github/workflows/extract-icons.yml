@@ -311,76 +311,8 @@ jobs:
           # This allows partial success and prevents blocking other steps
           exit 0
 
-      - name: Update database
-        if: steps.get-apps.outputs.app_count != '0'
-        shell: bash
-        env:
-          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          node << 'EOF'
-          const fs = require('fs');
-          const { createClient } = require('@supabase/supabase-js');
-
-          const supabaseUrl = process.env.SUPABASE_URL;
-          const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-
-          if (!supabaseUrl || !supabaseKey) {
-            console.log('Supabase credentials not configured, skipping database update');
-            process.exit(0);
-          }
-
-          const supabase = createClient(supabaseUrl, supabaseKey);
-
-          async function updateDatabase() {
-            const results = JSON.parse(fs.readFileSync('icon-results.json', 'utf8'));
-
-            const successful = results.filter(r => r.status === 'success');
-
-            for (const result of successful) {
-              const { error } = await supabase
-                .from('curated_apps')
-                .update({
-                  icon_path: result.icon_path,
-                  has_icon: true,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('winget_id', result.winget_id);
-
-              if (error) {
-                console.error(`Failed to update ${result.winget_id}:`, error.message);
-              }
-            }
-
-            // Update sync status
-            await supabase.from('curated_sync_status').upsert({
-              id: 'extract-icons',
-              last_run_completed_at: new Date().toISOString(),
-              last_run_status: 'success',
-              items_processed: successful.length,
-              metadata: {
-                total: results.length,
-                successful: successful.length,
-                failed: results.filter(r => r.status === 'failed').length
-              },
-              updated_at: new Date().toISOString()
-            });
-
-            console.log(`Updated ${successful.length} apps with icon paths`);
-          }
-
-          updateDatabase()
-            .then(() => {
-              console.log('Database update complete');
-              process.exit(0);
-            })
-            .catch(err => {
-              console.error('Database update failed:', err);
-              process.exit(1);
-            });
-          EOF
-
       - name: Commit icons
+        id: commit-icons
         if: steps.get-apps.outputs.app_count != '0'
         shell: bash
         run: |
@@ -397,17 +329,119 @@ jobs:
 
           if git diff --staged --quiet; then
             echo "No new icons to commit"
+            echo "committed=false" >> $GITHUB_OUTPUT
+            echo "committed_apps=" >> $GITHUB_OUTPUT
           else
-            ICON_COUNT=$(git diff --staged --name-only | grep -c "icon-64.png" || echo "0")
+            # Get list of apps with committed icons (extract winget_id from path)
+            COMMITTED_APPS=$(git diff --staged --name-only | grep "icon-64.png" | sed 's|public/icons/\(.*\)/icon-64.png|\1|' | tr '\n' ',' | sed 's/,$//')
+            ICON_COUNT=$(echo "$COMMITTED_APPS" | tr ',' '\n' | grep -c . || echo "0")
+
             git commit -m "chore: add icons for $ICON_COUNT apps"
 
             # Push with retry for race conditions
+            PUSH_SUCCESS=false
             for i in 1 2 3; do
-              git pull --rebase origin main && git push origin main && break
+              if git pull --rebase origin main && git push origin main; then
+                PUSH_SUCCESS=true
+                break
+              fi
               echo "Retry $i: pull/push failed, retrying..."
               sleep 5
             done
+
+            if [ "$PUSH_SUCCESS" = true ]; then
+              echo "committed=true" >> $GITHUB_OUTPUT
+              echo "committed_apps=$COMMITTED_APPS" >> $GITHUB_OUTPUT
+              echo "Successfully committed icons for: $COMMITTED_APPS"
+            else
+              echo "committed=false" >> $GITHUB_OUTPUT
+              echo "committed_apps=" >> $GITHUB_OUTPUT
+              echo "Failed to push icons to repository"
+            fi
           fi
+
+      - name: Update database
+        if: steps.commit-icons.outputs.committed == 'true'
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          COMMITTED_APPS: ${{ steps.commit-icons.outputs.committed_apps }}
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+          const { createClient } = require('@supabase/supabase-js');
+
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+          const committedApps = process.env.COMMITTED_APPS ? process.env.COMMITTED_APPS.split(',').filter(Boolean) : [];
+
+          if (!supabaseUrl || !supabaseKey) {
+            console.log('Supabase credentials not configured, skipping database update');
+            process.exit(0);
+          }
+
+          if (committedApps.length === 0) {
+            console.log('No apps to update in database');
+            process.exit(0);
+          }
+
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          async function updateDatabase() {
+            const results = JSON.parse(fs.readFileSync('icon-results.json', 'utf8'));
+
+            // Only update apps that were actually committed
+            const toUpdate = results.filter(r =>
+              r.status === 'success' && committedApps.includes(r.winget_id)
+            );
+
+            console.log(`Updating database for ${toUpdate.length} committed apps`);
+
+            for (const result of toUpdate) {
+              const { error } = await supabase
+                .from('curated_apps')
+                .update({
+                  icon_path: result.icon_path,
+                  has_icon: true,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('winget_id', result.winget_id);
+
+              if (error) {
+                console.error(`Failed to update ${result.winget_id}:`, error.message);
+              } else {
+                console.log(`Updated ${result.winget_id}`);
+              }
+            }
+
+            // Update sync status
+            await supabase.from('curated_sync_status').upsert({
+              id: 'extract-icons',
+              last_run_completed_at: new Date().toISOString(),
+              last_run_status: 'success',
+              items_processed: toUpdate.length,
+              metadata: {
+                total: results.length,
+                successful: toUpdate.length,
+                failed: results.filter(r => r.status === 'failed').length
+              },
+              updated_at: new Date().toISOString()
+            });
+
+            console.log(`Updated ${toUpdate.length} apps with icon paths`);
+          }
+
+          updateDatabase()
+            .then(() => {
+              console.log('Database update complete');
+              process.exit(0);
+            })
+            .catch(err => {
+              console.error('Database update failed:', err);
+              process.exit(1);
+            });
+          EOF
 
       - name: Create summary
         run: |
