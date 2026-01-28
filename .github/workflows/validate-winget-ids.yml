@@ -75,20 +75,25 @@ jobs:
           winget --version
 
           # List current sources
-          Write-Host "`nCurrent winget sources:"
+          Write-Host "`nCurrent winget sources (before setup):"
           winget source list
 
-          # Reset and update the winget source to ensure clean state
-          Write-Host "`nResetting winget source..."
-          winget source reset --force winget
-
-          # Accept source agreements by running a search (this initializes everything properly)
-          Write-Host "`nInitializing sources (accepting agreements)..."
-          $null = winget search --id Microsoft.PowerShell --source winget --accept-source-agreements 2>&1
+          # Check if winget source exists, if not add it
+          $sources = winget source list 2>&1 | Out-String
+          if ($sources -notmatch 'winget\s+https://cdn.winget.microsoft.com/cache') {
+            Write-Host "`nWinget community source not found - adding it..."
+            winget source add --name winget --arg https://cdn.winget.microsoft.com/cache --accept-source-agreements
+          } else {
+            Write-Host "`nWinget community source already exists"
+          }
 
           # Update sources
           Write-Host "`nUpdating winget sources..."
-          winget source update
+          winget source update --name winget
+
+          # List sources again to confirm
+          Write-Host "`nCurrent winget sources (after setup):"
+          winget source list
 
           # Wait for source index to be ready
           Start-Sleep -Seconds 5
@@ -101,9 +106,21 @@ jobs:
           } else {
             Write-Host "Winget verification WARNING - Microsoft.Skype not found in initial test" -ForegroundColor Yellow
             Write-Host "Output: $testOutput"
-            # Try one more time after additional wait
+            # Try adding the source explicitly and update again
+            Write-Host "`nRetrying source setup..."
+            winget source remove --name winget 2>$null
+            winget source add --name winget --arg https://cdn.winget.microsoft.com/cache --accept-source-agreements
+            winget source update --name winget
             Start-Sleep -Seconds 10
-            winget source update
+
+            # Final verification
+            $testOutput2 = winget show --id Microsoft.Skype --exact --source winget --accept-source-agreements 2>&1 | Out-String
+            if ($testOutput2 -match 'Microsoft.Skype') {
+              Write-Host "Winget verification PASSED after retry" -ForegroundColor Green
+            } else {
+              Write-Host "Winget verification FAILED - continuing anyway" -ForegroundColor Red
+              Write-Host "Output: $testOutput2"
+            }
           }
 
       - name: Fetch apps from Supabase
