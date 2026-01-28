@@ -9,6 +9,7 @@ import type { NormalizedPackage, NormalizedInstaller } from '@/types/winget';
 import { useCartStore } from '@/stores/cart-store';
 import { generateDetectionRules, generateInstallCommand, generateUninstallCommand } from '@/lib/detection-rules';
 import { DEFAULT_PSADT_CONFIG, getDefaultProcessesToClose } from '@/types/psadt';
+import { toast } from '@/hooks/use-toast';
 
 interface AppCardProps {
   package: NormalizedPackage;
@@ -73,9 +74,20 @@ function AppCardComponent({ package: pkg, onSelect }: AppCardProps) {
             detectionRules: detectionRules as any,
           },
         });
+      } else {
+        toast({
+          title: 'No compatible installer found',
+          description: `Could not find a suitable installer for ${pkg.name}`,
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Error adding to cart:', error);
+      toast({
+        title: 'Failed to add app',
+        description: 'Could not fetch package information. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
