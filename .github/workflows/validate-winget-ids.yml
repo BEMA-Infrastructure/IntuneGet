@@ -73,6 +73,10 @@ jobs:
 
           winget --version
 
+          # Update winget sources to ensure we have latest package data
+          Write-Host "Updating winget sources..."
+          winget source update --accept-source-agreements
+
       - name: Fetch apps from Supabase
         id: fetch
         env:
@@ -264,13 +268,14 @@ jobs:
               [string]$AppName,
               [string]$Publisher,
               [string]$ExistingWingetId,
-              [array]$SearchResults
+              [array]$SearchResults,
+              [int]$MinScore = 40
             )
 
             $bestScore = 0
             $bestMatch = $null
 
-            # Extract publisher from existing winget ID for matching
+            # Extract publisher from existing winget ID for matching (bonus only, no penalty)
             $existingPublisher = $null
             if ($ExistingWingetId -match '^([A-Za-z0-9]+)\.') {
               $existingPublisher = $Matches[1]
@@ -283,13 +288,9 @@ jobs:
               $searchName = $AppName.ToLower()
               $searchPublisher = if ($Publisher) { $Publisher.ToLower() } else { "" }
 
-              # CRITICAL: Publisher match from existing winget ID (highest priority)
-              if ($existingPublisher) {
-                if ($result.Id -like "$existingPublisher.*") {
-                  $score += 100  # Same publisher as existing ID - very high confidence
-                } else {
-                  $score -= 50   # Different publisher - big penalty to avoid wrong matches
-                }
+              # Publisher match bonus (no penalty - existing ID might be wrong)
+              if ($existingPublisher -and $result.Id -like "$existingPublisher.*") {
+                $score += 50  # Same publisher as existing ID - bonus
               }
 
               # 1. Exact name match
@@ -309,7 +310,7 @@ jobs:
               $normalizedName = $searchName -replace '[^a-z0-9]', ''
               $normalizedId = $resultId -replace '[^a-z0-9]', ''
               if ($normalizedId -like "*$normalizedName*") {
-                $score += 25
+                $score += 30
               }
 
               # 5. Publisher match in ID (from database publisher field)
@@ -332,8 +333,8 @@ jobs:
               }
             }
 
-            # Only return if confidence is high enough
-            if ($bestScore -ge 50) {
+            # Return if confidence meets minimum threshold
+            if ($bestScore -ge $MinScore -and $bestMatch) {
               return @{
                 Id = $bestMatch.Id
                 Score = $bestScore
@@ -433,7 +434,7 @@ jobs:
               # Check if it looks like a valid winget ID (Publisher.Name format)
               if ($answer -match '^[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+$') {
                 # Verify the ID actually exists in winget
-                $verifyOutput = winget show --id $answer --exact --accept-source-agreements 2>&1 | Out-String
+                $verifyOutput = winget show --id $answer --exact --source winget --accept-source-agreements 2>&1 | Out-String
                 if ($LASTEXITCODE -eq 0 -and $verifyOutput -notmatch 'No package found') {
                   return @{ Status = "FOUND"; Id = $answer }
                 } else {
@@ -483,7 +484,7 @@ jobs:
               # Step 1: Validate existing ID (if mode includes validation)
               if ($mode -eq 'validate' -or $mode -eq 'both') {
                 # Use --exact flag to ensure precise ID matching
-                $showOutput = winget show --id $wingetId --exact --accept-source-agreements 2>&1 | Out-String
+                $showOutput = winget show --id $wingetId --exact --source winget --accept-source-agreements 2>&1 | Out-String
 
                 if ($LASTEXITCODE -eq 0 -and $showOutput -notmatch 'No package found') {
                   $result.is_valid = $true
