@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getManifest, getInstallers, getBestInstaller } from '@/lib/winget-api';
-import { fetchSimilarPackages } from '@/lib/manifest-api';
+import { getManifest, getInstallers, getBestInstaller, getPackage } from '@/lib/winget-api';
+import { fetchSimilarPackages, fetchAvailableVersions } from '@/lib/manifest-api';
 
 export const runtime = 'edge';
 
@@ -18,7 +18,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const manifest = await getManifest(packageId, version || undefined);
+    // Try to get manifest
+    let manifest = await getManifest(packageId, version || undefined);
+
+    // If manifest lookup fails, try to get package info and use its version
+    if (!manifest) {
+      console.warn(`Direct manifest lookup failed for ${packageId}, trying package lookup`);
+      const pkg = await getPackage(packageId);
+      if (pkg && pkg.version) {
+        console.log(`Found package ${packageId} with version ${pkg.version}, retrying manifest fetch`);
+        manifest = await getManifest(packageId, pkg.version);
+      }
+    }
+
+    // If still no manifest, try fetching available versions directly from GitHub
+    if (!manifest) {
+      console.warn(`Package lookup failed for ${packageId}, trying GitHub versions`);
+      const versions = await fetchAvailableVersions(packageId);
+      if (versions.length > 0) {
+        console.log(`Found ${versions.length} versions for ${packageId} from GitHub, trying latest: ${versions[0]}`);
+        manifest = await getManifest(packageId, versions[0]);
+      }
+    }
 
     if (!manifest) {
       // Fetch similar packages to suggest
@@ -36,11 +57,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get normalized installers
-    const installers = await getInstallers(packageId, version || undefined);
+    const installers = await getInstallers(packageId, version || manifest.Version);
 
     // Get best installer for requested architecture
     const bestInstaller = architecture
-      ? await getBestInstaller(packageId, version || undefined, architecture)
+      ? await getBestInstaller(packageId, version || manifest.Version, architecture)
       : installers[0] || null;
 
     return NextResponse.json({
@@ -61,7 +82,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Manifest fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch manifest' },
+      { error: 'Failed to fetch manifest', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

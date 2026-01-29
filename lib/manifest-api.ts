@@ -1,10 +1,11 @@
 /**
  * Manifest API
- * Direct fetch from GitHub winget-pkgs repository
- * Replaces WinGet.Run API dependency
+ * Primary source: Supabase version_history table (pre-synced from winget-pkgs)
+ * Fallback: Direct fetch from GitHub winget-pkgs repository
  */
 
 import YAML from 'yaml';
+import { createClient } from '@supabase/supabase-js';
 import type {
   WingetManifest,
   WingetInstaller,
@@ -18,6 +19,18 @@ const GITHUB_API_BASE = 'https://api.github.com/repos/microsoft/winget-pkgs/cont
 // Cache for manifest data
 const manifestCache = new Map<string, { data: WingetManifest; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Supabase client for server-side operations
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    return null;
+  }
+
+  return createClient(url, key);
+}
 
 /**
  * Build paths for Winget manifest URLs
@@ -44,9 +57,29 @@ function getManifestPaths(wingetId: string) {
 }
 
 /**
- * Fetch available versions for a package from GitHub API
+ * Fetch available versions for a package
+ * Priority: Supabase version_history -> GitHub API
  */
 export async function fetchAvailableVersions(wingetId: string): Promise<string[]> {
+  // Try Supabase first
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data: versions } = await supabase
+        .from('version_history')
+        .select('version')
+        .eq('winget_id', wingetId)
+        .order('created_at', { ascending: false });
+
+      if (versions && versions.length > 0) {
+        return versions.map(v => v.version);
+      }
+    } catch (error) {
+      console.warn(`Supabase version lookup failed for ${wingetId}:`, error);
+    }
+  }
+
+  // Fallback to GitHub API
   const { basePath } = getManifestPaths(wingetId);
 
   try {
@@ -55,11 +88,16 @@ export async function fetchAvailableVersions(wingetId: string): Promise<string[]
         'User-Agent': 'IntuneGet',
         Accept: 'application/vnd.github.v3+json',
       },
-      next: { revalidate: 300 },
+      cache: 'no-store', // Avoid stale cache issues in edge runtime
     });
 
     if (!response.ok) {
       if (response.status === 404) {
+        console.warn(`Package ${wingetId} not found in GitHub API (404)`);
+        return [];
+      }
+      if (response.status === 403) {
+        console.warn(`GitHub API rate limit hit for ${wingetId}`);
         return [];
       }
       throw new Error(`GitHub API error: ${response.status}`);
@@ -67,12 +105,15 @@ export async function fetchAvailableVersions(wingetId: string): Promise<string[]
 
     const dirs = await response.json();
 
-    return dirs
+    const versions = dirs
       .filter((d: { type: string }) => d.type === 'dir')
       .map((d: { name: string }) => d.name)
       .sort((a: string, b: string) =>
         b.localeCompare(a, undefined, { numeric: true })
       );
+
+    console.log(`Found ${versions.length} versions for ${wingetId} from GitHub`);
+    return versions;
   } catch (error) {
     console.error(`Failed to fetch versions for ${wingetId}:`, error);
     return [];
@@ -95,11 +136,12 @@ export async function fetchInstallerManifest(
         Accept: 'text/plain',
         'User-Agent': 'IntuneGet',
       },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
       if (response.status === 404) {
+        console.warn(`Installer manifest not found: ${url}`);
         return null;
       }
       throw new Error(`GitHub fetch error: ${response.status}`);
@@ -135,7 +177,7 @@ export async function fetchLocaleManifest(
           Accept: 'text/plain',
           'User-Agent': 'IntuneGet',
         },
-        next: { revalidate: 300 },
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -166,7 +208,7 @@ export async function fetchVersionManifest(
         Accept: 'text/plain',
         'User-Agent': 'IntuneGet',
       },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -181,13 +223,103 @@ export async function fetchVersionManifest(
 }
 
 /**
+ * Try to get manifest from Supabase version_history table first
+ */
+async function getManifestFromSupabase(
+  wingetId: string,
+  version?: string
+): Promise<WingetManifest | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+
+  try {
+    // First get curated app info
+    const { data: curatedApp } = await supabase
+      .from('curated_apps')
+      .select('name, publisher, description, homepage, license, latest_version')
+      .eq('winget_id', wingetId)
+      .single();
+
+    // Get version history with installer data
+    let query = supabase
+      .from('version_history')
+      .select('*')
+      .eq('winget_id', wingetId);
+
+    if (version) {
+      query = query.eq('version', version);
+    } else {
+      query = query.order('created_at', { ascending: false }).limit(1);
+    }
+
+    const { data: versionData, error } = await query.single();
+
+    if (error || !versionData) {
+      return null;
+    }
+
+    // Parse installers from JSONB or build from individual fields
+    let installers: WingetInstaller[] = [];
+
+    if (versionData.installers && Array.isArray(versionData.installers) && versionData.installers.length > 0) {
+      // Use pre-parsed installers array
+      installers = (versionData.installers as Array<Record<string, unknown>>).map((inst) => ({
+        Architecture: (inst.Architecture as WingetInstaller['Architecture']) || 'x64',
+        InstallerUrl: (inst.InstallerUrl as string) || '',
+        InstallerSha256: (inst.InstallerSha256 as string) || '',
+        InstallerType: normalizeInstallerType(inst.InstallerType as string),
+        Scope: inst.Scope as WingetInstaller['Scope'],
+        InstallerSwitches: inst.InstallerSwitches as WingetInstaller['InstallerSwitches'],
+        ProductCode: inst.ProductCode as string,
+        PackageFamilyName: inst.PackageFamilyName as string,
+        UpgradeBehavior: inst.UpgradeBehavior as WingetInstaller['UpgradeBehavior'],
+      }));
+    } else if (versionData.installer_url) {
+      // Build single installer from individual fields
+      installers = [{
+        Architecture: 'x64',
+        InstallerUrl: versionData.installer_url,
+        InstallerSha256: versionData.installer_sha256 || '',
+        InstallerType: normalizeInstallerType(versionData.installer_type),
+        Scope: versionData.installer_scope as WingetInstaller['Scope'],
+        InstallerSwitches: versionData.silent_args ? { Silent: versionData.silent_args } : undefined,
+      }];
+    }
+
+    if (installers.length === 0) {
+      return null;
+    }
+
+    // Build manifest from cached data
+    const manifest: WingetManifest = {
+      Id: wingetId,
+      Name: curatedApp?.name || wingetId.split('.').slice(1).join(' '),
+      Publisher: curatedApp?.publisher || wingetId.split('.')[0],
+      Version: versionData.version,
+      Description: curatedApp?.description,
+      Homepage: curatedApp?.homepage,
+      License: curatedApp?.license,
+      Installers: installers,
+    };
+
+    return manifest;
+  } catch (error) {
+    console.error(`Failed to get manifest from Supabase for ${wingetId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Get full manifest with all data combined
+ * Priority: Memory cache -> Supabase version_history -> GitHub API
  */
 export async function getFullManifest(
   wingetId: string,
   version?: string
 ): Promise<WingetManifest | null> {
-  // Check cache
+  // Check memory cache
   const cacheKey = `${wingetId}@${version || 'latest'}`;
   const cached = manifestCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -195,6 +327,14 @@ export async function getFullManifest(
   }
 
   try {
+    // Try Supabase first (pre-synced data)
+    const supabaseManifest = await getManifestFromSupabase(wingetId, version);
+    if (supabaseManifest) {
+      manifestCache.set(cacheKey, { data: supabaseManifest, timestamp: Date.now() });
+      return supabaseManifest;
+    }
+
+    // Fallback to GitHub API
     // Get version if not specified
     let targetVersion = version;
     if (!targetVersion) {
@@ -437,7 +577,7 @@ export async function fetchSimilarPackages(wingetId: string): Promise<string[]> 
         'User-Agent': 'IntuneGet',
         Accept: 'application/vnd.github.v3+json',
       },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     });
 
     if (!response.ok) {

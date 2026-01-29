@@ -12,9 +12,12 @@ import {
   AlertCircle,
   Loader2,
   Shield,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cart-store';
+import { CartItemConfig } from '@/components/CartItemConfig';
+import type { CartItem } from '@/types/upload';
 import { useMicrosoftAuth } from '@/hooks/useMicrosoftAuth';
 import { usePermissionStatus } from '@/hooks/usePermissionStatus';
 import { trackDeployment } from '@/hooks/useLandingStats';
@@ -44,6 +47,7 @@ export function UploadCart() {
   const clearCart = useCartStore((state) => state.clearCart);
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<CartItem | null>(null);
 
   const { isAuthenticated, getAccessToken, signIn, requestAdminConsent } = useMicrosoftAuth();
   const {
@@ -193,13 +197,24 @@ export function UploadCart() {
                         {item.publisher}
                       </p>
                     </div>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-zinc-500 hover:text-status-error transition-colors"
-                      disabled={isDeploying}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingItem(item)}
+                        className="text-zinc-500 hover:text-accent-cyan transition-colors p-1"
+                        disabled={isDeploying}
+                        title="Edit configuration"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => removeItem(item.id)}
+                        className="text-zinc-500 hover:text-status-error transition-colors p-1"
+                        disabled={isDeploying}
+                        title="Remove from cart"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -321,6 +336,14 @@ export function UploadCart() {
           </div>
         )}
       </div>
+
+      {/* Cart Item Config Modal */}
+      {editingItem && (
+        <CartItemConfig
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+        />
+      )}
     </div>
   );
 }

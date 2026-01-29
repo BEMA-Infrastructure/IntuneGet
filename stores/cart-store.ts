@@ -17,6 +17,7 @@ interface CartState {
 
 interface CartActions {
   addItem: (item: Omit<CartItem, 'id' | 'addedAt'>) => void;
+  addItemSilent: (item: Omit<CartItem, 'id' | 'addedAt'>) => void;
   removeItem: (id: string) => void;
   updateItem: (id: string, updates: Partial<CartItem>) => void;
   clearCart: () => void;
@@ -47,6 +48,21 @@ export const useCartStore = create<CartStore>()(
             },
           ],
           isOpen: true, // Auto-open cart when adding
+        }));
+      },
+
+      addItemSilent: (item) => {
+        const id = `${item.wingetId}-${item.version}-${item.architecture}-${Date.now()}`;
+        set((state) => ({
+          items: [
+            ...state.items,
+            {
+              ...item,
+              id,
+              addedAt: new Date().toISOString(),
+            },
+          ],
+          // Don't open cart - used for bulk operations
         }));
       },
 

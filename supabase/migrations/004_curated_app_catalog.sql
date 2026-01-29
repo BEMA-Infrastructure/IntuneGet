@@ -1,6 +1,6 @@
 -- Curated App Catalog Migration
 -- Replaces WinGet.Run API with a self-managed system:
--- - 1000 popular Windows apps (ranked by Chocolatey download stats)
+-- - 30,000+ Windows apps from winget-pkgs-index
 -- - GitHub Action-based manifest syncing and installation scanning
 -- - Icon storage in Git repository
 -- - Installation changelog tracking (files, registry, shortcuts)

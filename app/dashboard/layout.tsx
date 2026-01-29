@@ -21,6 +21,8 @@ import {
   RefreshCw,
   Loader2,
   ArrowUpCircle,
+  Radar,
+  FolderSync,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cart-store';
@@ -29,6 +31,7 @@ import { useMicrosoftAuth } from '@/hooks/useMicrosoftAuth';
 import { useOnboardingStatus } from '@/hooks/useOnboardingStatus';
 import { UpdateBadge } from '@/components/inventory';
 import { TenantSwitcher } from '@/components/msp';
+import { UploadCart } from '@/components/UploadCart';
 
 type NavItem = {
   name: string;
@@ -40,6 +43,8 @@ type NavItem = {
 const navigation: NavItem[] = [
   { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { name: 'App Catalog', href: '/dashboard/apps', icon: Package },
+  { name: 'Unmanaged', href: '/dashboard/unmanaged', icon: Radar },
+  { name: 'SCCM Migration', href: '/dashboard/sccm', icon: FolderSync },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Server, badge: 'update' },
   { name: 'Updates', href: '/dashboard/updates', icon: ArrowUpCircle },
   { name: 'Uploads', href: '/dashboard/uploads', icon: Upload },
@@ -344,6 +349,9 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {/* Upload Cart Sidebar */}
+      <UploadCart />
     </div>
   );
 }

@@ -1,0 +1,521 @@
+/**
+ * SCCM Migration API Route
+ * Execute migration of SCCM apps to Intune via cart workflow
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+import { getAuthFromRequest } from '@/lib/auth/parse-token';
+import { logMigrationHistoryAsync, createSuccessEntry } from '@/lib/sccm/history-logger';
+import {
+  prepareMigrations,
+  executeMigrationBatch,
+  generateMigrationPreview,
+  calculateMigrationStats,
+} from '@/lib/migration/migration-orchestrator';
+import { convertDetectionRules, mapInstallBehavior } from '@/lib/migration/settings-converter';
+import type {
+  SccmApplication,
+  SccmAppRecord,
+  SccmMigrationOptions,
+  SccmMigrationPreviewRequest,
+  SccmMigrationPreviewResponse,
+  SccmMigrationExecuteRequest,
+  SccmMigrationResult,
+} from '@/types/sccm';
+import type { NormalizedPackage, NormalizedInstaller } from '@/types/winget';
+
+// Database row type
+interface SccmAppRow {
+  id: string;
+  migration_id: string;
+  user_id: string;
+  tenant_id: string;
+  sccm_ci_id: string;
+  display_name: string;
+  manufacturer: string | null;
+  version: string | null;
+  technology: string;
+  is_deployed: boolean;
+  deployment_count: number;
+  sccm_app_data: SccmApplication;
+  sccm_detection_rules: unknown[];
+  sccm_install_command: string | null;
+  sccm_uninstall_command: string | null;
+  sccm_install_behavior: string | null;
+  match_status: string;
+  match_confidence: number | null;
+  matched_winget_id: string | null;
+  matched_winget_name: string | null;
+  partial_matches: unknown[];
+  matched_by: string | null;
+  preserve_detection_rules: boolean;
+  preserve_install_commands: boolean;
+  use_winget_defaults: boolean;
+  custom_settings: unknown | null;
+  converted_detection_rules: unknown[] | null;
+  converted_install_behavior: string | null;
+  migration_status: string;
+  migration_error: string | null;
+  intune_app_id: string | null;
+  migrated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Convert database row to SccmAppRecord
+ */
+function rowToAppRecord(row: SccmAppRow): SccmAppRecord {
+  return {
+    id: row.id,
+    migrationId: row.migration_id,
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+    sccmCiId: row.sccm_ci_id,
+    displayName: row.display_name,
+    manufacturer: row.manufacturer,
+    version: row.version,
+    technology: row.technology as SccmAppRecord['technology'],
+    isDeployed: row.is_deployed,
+    deploymentCount: row.deployment_count,
+    sccmAppData: row.sccm_app_data,
+    sccmDetectionRules: row.sccm_detection_rules as SccmAppRecord['sccmDetectionRules'],
+    sccmInstallCommand: row.sccm_install_command,
+    sccmUninstallCommand: row.sccm_uninstall_command,
+    sccmInstallBehavior: row.sccm_install_behavior,
+    matchStatus: row.match_status as SccmAppRecord['matchStatus'],
+    matchConfidence: row.match_confidence,
+    matchedWingetId: row.matched_winget_id,
+    matchedWingetName: row.matched_winget_name,
+    partialMatches: row.partial_matches as SccmAppRecord['partialMatches'],
+    matchedBy: row.matched_by as SccmAppRecord['matchedBy'],
+    preserveDetectionRules: row.preserve_detection_rules,
+    preserveInstallCommands: row.preserve_install_commands,
+    useWingetDefaults: row.use_winget_defaults,
+    customSettings: row.custom_settings as SccmAppRecord['customSettings'],
+    convertedDetectionRules: row.converted_detection_rules as SccmAppRecord['convertedDetectionRules'],
+    convertedInstallBehavior: row.converted_install_behavior as SccmAppRecord['convertedInstallBehavior'],
+    migrationStatus: row.migration_status as SccmAppRecord['migrationStatus'],
+    migrationError: row.migration_error || undefined,
+    intuneAppId: row.intune_app_id || undefined,
+    migratedAt: row.migrated_at || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Fetch WinGet package from curated_apps
+ */
+async function fetchWingetPackage(
+  wingetId: string,
+  supabase: ReturnType<typeof createServerClient>
+): Promise<NormalizedPackage | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('curated_apps')
+    .select('winget_id, name, publisher, latest_version, description, homepage, license, tags, category, icon_path')
+    .eq('winget_id', wingetId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    id: data.winget_id,
+    name: data.name,
+    publisher: data.publisher,
+    version: data.latest_version,
+    description: data.description,
+    homepage: data.homepage,
+    license: data.license,
+    tags: data.tags,
+    category: data.category,
+    iconPath: data.icon_path,
+  };
+}
+
+/**
+ * Fetch best installer for a package from version_history
+ */
+async function fetchBestInstaller(
+  pkg: NormalizedPackage,
+  supabase: ReturnType<typeof createServerClient>
+): Promise<NormalizedInstaller | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('version_history')
+    .select('installers, installer_url, installer_sha256, installer_type, installer_scope')
+    .eq('winget_id', pkg.id)
+    .eq('version', pkg.version)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  // Try to find x64 installer from installers array
+  if (data.installers && Array.isArray(data.installers)) {
+    const x64 = data.installers.find(
+      (i: { architecture?: string }) => i.architecture === 'x64'
+    );
+    if (x64) {
+      return {
+        architecture: 'x64',
+        url: x64.InstallerUrl || x64.url,
+        sha256: x64.InstallerSha256 || x64.sha256,
+        type: (x64.InstallerType || x64.type || 'exe').toLowerCase(),
+        scope: x64.Scope || x64.scope,
+        silentArgs: x64.InstallerSwitches?.Silent || x64.silentArgs,
+        productCode: x64.ProductCode || x64.productCode,
+      };
+    }
+
+    // Fall back to first installer
+    const first = data.installers[0];
+    if (first) {
+      return {
+        architecture: first.Architecture || first.architecture || 'x64',
+        url: first.InstallerUrl || first.url,
+        sha256: first.InstallerSha256 || first.sha256,
+        type: (first.InstallerType || first.type || 'exe').toLowerCase(),
+        scope: first.Scope || first.scope,
+        silentArgs: first.InstallerSwitches?.Silent || first.silentArgs,
+        productCode: first.ProductCode || first.productCode,
+      };
+    }
+  }
+
+  // Fall back to single installer columns
+  if (data.installer_url && data.installer_sha256) {
+    return {
+      architecture: 'x64',
+      url: data.installer_url,
+      sha256: data.installer_sha256,
+      type: data.installer_type || 'exe',
+      scope: data.installer_scope,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * POST - Preview or execute migration
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action') || 'preview';
+
+    if (!body.migrationId || !body.appIds || !Array.isArray(body.appIds)) {
+      return NextResponse.json(
+        { error: 'Migration ID and app IDs array are required' },
+        { status: 400 }
+      );
+    }
+
+    const options: SccmMigrationOptions = {
+      preserveDetection: body.options?.preserveDetection ?? true,
+      preserveInstallCommands: body.options?.preserveInstallCommands ?? false,
+      useWingetDefaults: body.options?.useWingetDefaults ?? true,
+      batchSize: body.options?.batchSize ?? 10,
+      dryRun: action === 'preview',
+    };
+
+    const supabase = createServerClient();
+
+    // Verify migration ownership
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: migration, error: migrationError } = await (supabase as any)
+      .from('sccm_migrations')
+      .select('id, status')
+      .eq('id', body.migrationId)
+      .eq('tenant_id', auth.tenantId)
+      .single();
+
+    if (migrationError || !migration) {
+      return NextResponse.json(
+        { error: 'Migration not found' },
+        { status: 404 }
+      );
+    }
+
+    // Fetch apps
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: appRows, error: appsError } = await (supabase as any)
+      .from('sccm_apps')
+      .select('*')
+      .eq('migration_id', body.migrationId)
+      .in('id', body.appIds) as { data: SccmAppRow[] | null; error: Error | null };
+
+    if (appsError || !appRows || appRows.length === 0) {
+      return NextResponse.json(
+        { error: 'No apps found with the provided IDs' },
+        { status: 404 }
+      );
+    }
+
+    const apps = appRows.map(rowToAppRecord);
+
+    // Pre-convert SCCM settings for apps that need it
+    for (const app of apps) {
+      if (options.preserveDetection && !app.convertedDetectionRules) {
+        app.convertedDetectionRules = convertDetectionRules(app.sccmDetectionRules);
+      }
+      if (!app.convertedInstallBehavior) {
+        app.convertedInstallBehavior = mapInstallBehavior(app.sccmInstallBehavior);
+      }
+    }
+
+    // Prepare migrations
+    const preparations = await prepareMigrations(
+      apps,
+      options,
+      (wingetId) => fetchWingetPackage(wingetId, supabase),
+      (pkg) => fetchBestInstaller(pkg, supabase)
+    );
+
+    // Preview mode - return what would be migrated
+    if (action === 'preview') {
+      const stats = calculateMigrationStats(preparations);
+
+      const response: SccmMigrationPreviewResponse = {
+        success: true,
+        migrationId: body.migrationId,
+        totalApps: preparations.length,
+        migratable: stats.migratable,
+        blocked: stats.blocked,
+        items: preparations.map(p => p.preview),
+        warnings: preparations.flatMap(p => p.preview.warnings),
+      };
+
+      return NextResponse.json(response);
+    }
+
+    // Execute mode - create cart items and update app status
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('sccm_migrations')
+      .update({ status: 'migrating', updated_at: new Date().toISOString() })
+      .eq('id', body.migrationId);
+
+    // Log migration started (fire-and-forget)
+    logMigrationHistoryAsync(
+      supabase,
+      createSuccessEntry(
+        body.migrationId,
+        auth.userId,
+        auth.tenantId,
+        'migration_started',
+        { totalApps: preparations.length, options }
+      )
+    );
+
+    const { cartItems, successful, failed } = executeMigrationBatch(preparations);
+
+    // Update app statuses
+    for (const appId of successful) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('sccm_apps')
+        .update({
+          migration_status: 'queued',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appId);
+    }
+
+    for (const { appId, error } of failed) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('sccm_apps')
+        .update({
+          migration_status: 'failed',
+          migration_error: error,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appId);
+    }
+
+    // Update migration status
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('sccm_migrations')
+      .update({
+        status: 'ready',
+        last_migration_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', body.migrationId);
+
+    // Log migration result (fire-and-forget)
+    logMigrationHistoryAsync(
+      supabase,
+      {
+        migration_id: body.migrationId,
+        user_id: auth.userId,
+        tenant_id: auth.tenantId,
+        action: 'migration_completed',
+        new_value: {
+          successful: successful.length,
+          failed: failed.length,
+        },
+        success: failed.length === 0,
+        affected_count: successful.length,
+      }
+    );
+
+    const response: SccmMigrationResult = {
+      success: true,
+      migrationId: body.migrationId,
+      totalAttempted: preparations.length,
+      successful: successful.length,
+      failed: failed.length,
+      skipped: preparations.length - successful.length - failed.length,
+      results: [
+        ...successful.map(appId => {
+          const prep = preparations.find(p => p.appId === appId);
+          return {
+            appId,
+            sccmName: prep?.sccmApp.displayName || '',
+            success: true,
+          };
+        }),
+        ...failed.map(f => {
+          const prep = preparations.find(p => p.appId === f.appId);
+          return {
+            appId: f.appId,
+            sccmName: prep?.sccmApp.displayName || '',
+            success: false,
+            error: f.error,
+          };
+        }),
+      ],
+    };
+
+    // Return cart items to be added by the client
+    return NextResponse.json({
+      ...response,
+      cartItems,
+    });
+  } catch (error) {
+    console.error('Migration POST error:', error);
+    return NextResponse.json(
+      { error: 'Failed to process migration' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH - Update migration settings for an app
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+
+    if (!body.appId) {
+      return NextResponse.json(
+        { error: 'App ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServerClient();
+
+    // Verify app ownership
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: app, error: appError } = await (supabase as any)
+      .from('sccm_apps')
+      .select('id, migration_id')
+      .eq('id', body.appId)
+      .eq('tenant_id', auth.tenantId)
+      .single();
+
+    if (appError || !app) {
+      return NextResponse.json(
+        { error: 'App not found' },
+        { status: 404 }
+      );
+    }
+
+    // Build update object
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (body.preserveDetectionRules !== undefined) {
+      updates.preserve_detection_rules = body.preserveDetectionRules;
+    }
+    if (body.preserveInstallCommands !== undefined) {
+      updates.preserve_install_commands = body.preserveInstallCommands;
+    }
+    if (body.useWingetDefaults !== undefined) {
+      updates.use_winget_defaults = body.useWingetDefaults;
+    }
+    if (body.customSettings !== undefined) {
+      updates.custom_settings = body.customSettings;
+    }
+    if (body.migrationStatus !== undefined) {
+      updates.migration_status = body.migrationStatus;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: updated, error: updateError } = await (supabase as any)
+      .from('sccm_apps')
+      .update(updates)
+      .eq('id', body.appId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Error updating app settings:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update app settings' },
+        { status: 500 }
+      );
+    }
+
+    // Log settings update (fire-and-forget)
+    logMigrationHistoryAsync(
+      supabase,
+      {
+        migration_id: app.migration_id,
+        user_id: auth.userId,
+        tenant_id: auth.tenantId,
+        action: 'settings_updated',
+        app_id: body.appId,
+        new_value: updates,
+        success: true,
+      }
+    );
+
+    return NextResponse.json({ app: updated });
+  } catch (error) {
+    console.error('Migration PATCH error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update migration settings' },
+      { status: 500 }
+    );
+  }
+}

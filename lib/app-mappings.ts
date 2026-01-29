@@ -461,6 +461,73 @@ export const APP_MAPPINGS: AppMapping[] = [
     aliases: ['heidisql', 'heidi sql'],
     publisher: 'HeidiSQL',
   },
+
+  // SCCM Common Enterprise Apps
+  {
+    wingetId: 'Microsoft.Office',
+    aliases: [
+      'microsoft 365 apps for enterprise',
+      'microsoft 365 apps for business',
+      'office 365 proplus',
+      'm365 apps',
+    ],
+    publisher: 'Microsoft',
+  },
+  {
+    wingetId: 'Citrix.Workspace',
+    aliases: ['citrix workspace', 'citrix receiver', 'citrix workspace app'],
+    publisher: 'Citrix',
+  },
+  {
+    wingetId: 'SAP.SAPLogon',
+    aliases: ['sap logon', 'sap gui', 'sap frontend'],
+    publisher: 'SAP',
+  },
+  {
+    wingetId: 'Splunk.UniversalForwarder',
+    aliases: ['splunk forwarder', 'splunk universal forwarder', 'splunkforwarder'],
+    publisher: 'Splunk',
+  },
+  {
+    wingetId: 'SolarWinds.DamewareRemote',
+    aliases: ['dameware', 'dameware remote', 'dameware mini remote'],
+    publisher: 'SolarWinds',
+  },
+  {
+    wingetId: 'Progress.MOVEit.Transfer',
+    aliases: ['moveit', 'moveit transfer', 'ipswitch moveit'],
+    publisher: 'Progress',
+  },
+  {
+    wingetId: 'BMCSoftware.FootPrints',
+    aliases: ['footprints', 'bmc footprints', 'numara footprints'],
+    publisher: 'BMC Software',
+  },
+  {
+    wingetId: 'ManageEngine.DesktopCentral',
+    aliases: ['desktop central', 'manageengine desktop central', 'zoho desktop central'],
+    publisher: 'ManageEngine',
+  },
+  {
+    wingetId: 'Ivanti.Workspace',
+    aliases: ['ivanti workspace', 'landesk', 'ivanti endpoint manager'],
+    publisher: 'Ivanti',
+  },
+  {
+    wingetId: 'Trend.ApexOne',
+    aliases: ['apex one', 'trend apex one', 'officescan', 'trend micro apex one'],
+    publisher: 'Trend Micro',
+  },
+  {
+    wingetId: 'Symantec.EndpointProtection',
+    aliases: ['symantec endpoint', 'sep', 'symantec endpoint protection', 'broadcom endpoint protection'],
+    publisher: 'Broadcom',
+  },
+  {
+    wingetId: 'McAfee.Agent',
+    aliases: ['mcafee agent', 'mcafee endpoint', 'trellix agent'],
+    publisher: 'McAfee',
+  },
 ];
 
 /**
