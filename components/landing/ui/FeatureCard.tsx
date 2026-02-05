@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { springPresets } from "@/lib/animations/variants";
 
 interface FeatureCardProps {
   icon: ReactNode;
@@ -35,9 +36,11 @@ export function FeatureCard({
           ? {}
           : {
               y: -8,
-              transition: { duration: 0.3, ease: "easeOut" },
+              boxShadow: "0 0 30px rgba(34, 211, 238, 0.15), 0 0 60px rgba(34, 211, 238, 0.1)",
+              transition: springPresets.snappy,
             }
       }
+      whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
     >
       {/* Icon container */}
       <div className="relative mb-6">

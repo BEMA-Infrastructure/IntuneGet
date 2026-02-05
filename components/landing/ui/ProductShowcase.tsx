@@ -11,14 +11,14 @@ interface ProductShowcaseProps {
 }
 
 const apps = [
-  { name: "Google Chrome", icon: "/icons/Google.Chrome/icon-64.png", status: "deployed" },
-  { name: "Microsoft Teams", icon: "/icons/Microsoft.Teams/icon-64.png", status: "deployed" },
-  { name: "VS Code", icon: "/icons/Microsoft.VisualStudioCode/icon-64.png", status: "deployed" },
-  { name: "Slack", icon: "/icons/SlackTechnologies.Slack/icon-64.png", status: "pending" },
-  { name: "Zoom", icon: "/icons/Zoom.Zoom/icon-64.png", status: "deployed" },
-  { name: "7-Zip", icon: "/icons/7zip.7zip/icon-64.png", status: "ready" },
-  { name: "Firefox", icon: "/icons/Mozilla.Firefox/icon-64.png", status: "ready" },
-  { name: "VLC Player", icon: "/icons/VideoLAN.VLC/icon-64.png", status: "ready" },
+  { name: "Google Chrome", icon: "/icons/Google.Chrome/icon-64.png", status: "deployed", alt: "Google Chrome deployment to Microsoft Intune via IntuneGet" },
+  { name: "Microsoft Teams", icon: "/icons/Microsoft.Teams/icon-64.png", status: "deployed", alt: "Microsoft Teams deployment to Intune using IntuneGet" },
+  { name: "VS Code", icon: "/icons/Microsoft.VisualStudioCode/icon-64.png", status: "deployed", alt: "Visual Studio Code deployment to Intune with IntuneGet" },
+  { name: "Slack", icon: "/icons/SlackTechnologies.Slack/icon-64.png", status: "pending", alt: "Slack app being packaged for Intune deployment" },
+  { name: "Zoom", icon: "/icons/Zoom.Zoom/icon-64.png", status: "deployed", alt: "Zoom deployment to Microsoft Intune via IntuneGet" },
+  { name: "7-Zip", icon: "/icons/7zip.7zip/icon-64.png", status: "ready", alt: "7-Zip ready for Intune deployment with IntuneGet" },
+  { name: "Firefox", icon: "/icons/Mozilla.Firefox/icon-64.png", status: "ready", alt: "Mozilla Firefox ready for Intune deployment" },
+  { name: "VLC Player", icon: "/icons/VideoLAN.VLC/icon-64.png", status: "ready", alt: "VLC Player ready for Intune deployment" },
 ];
 
 export function ProductShowcase({ className = "", compact = false }: ProductShowcaseProps) {
@@ -178,7 +178,7 @@ export function ProductShowcase({ className = "", compact = false }: ProductShow
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={app.icon}
-                    alt={app.name}
+                    alt={app.alt}
                     className={cn("object-contain", compact ? "w-5 h-5" : "w-7 h-7 md:w-8 md:h-8")}
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
@@ -223,11 +223,17 @@ export function ProductShowcase({ className = "", compact = false }: ProductShow
           <motion.div
             className="absolute -right-4 md:right-8 top-16 md:top-24 bg-white rounded-xl shadow-soft-lg border border-stone-200 p-3 md:p-4 w-48 md:w-56 hidden sm:block"
             initial={{ opacity: 0, x: 30, y: 20 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
+            animate={{
+              opacity: 1,
+              x: 0,
+              y: shouldReduceMotion ? 0 : [0, -8, 0],
+            }}
             transition={{
-              duration: shouldReduceMotion ? 0 : 0.4,
-              delay: 0.4,
-              ease: [0.25, 0.46, 0.45, 0.94],
+              opacity: { duration: shouldReduceMotion ? 0 : 0.4, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+              x: { duration: shouldReduceMotion ? 0 : 0.4, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+              y: shouldReduceMotion
+                ? { duration: 0 }
+                : { duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.4 },
             }}
           >
             <div className="flex items-center gap-3 mb-3">
@@ -258,11 +264,17 @@ export function ProductShowcase({ className = "", compact = false }: ProductShow
           <motion.div
             className="absolute -left-4 md:left-8 bottom-4 md:bottom-16 bg-white rounded-xl shadow-soft-lg border border-stone-200 p-3 md:p-4 w-44 md:w-48 hidden sm:block"
             initial={{ opacity: 0, x: -30, y: -20 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
+            animate={{
+              opacity: 1,
+              x: 0,
+              y: shouldReduceMotion ? 0 : [0, -6, 0],
+            }}
             transition={{
-              duration: shouldReduceMotion ? 0 : 0.4,
-              delay: 0.5,
-              ease: [0.25, 0.46, 0.45, 0.94],
+              opacity: { duration: shouldReduceMotion ? 0 : 0.4, delay: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+              x: { duration: shouldReduceMotion ? 0 : 0.4, delay: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+              y: shouldReduceMotion
+                ? { duration: 0 }
+                : { duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 },
             }}
           >
             <div className="flex items-center gap-3 mb-3">
@@ -284,11 +296,17 @@ export function ProductShowcase({ className = "", compact = false }: ProductShow
           <motion.div
             className="absolute right-4 md:right-24 -bottom-2 md:bottom-8 bg-white rounded-xl shadow-soft-lg border border-emerald-200 p-2.5 md:p-3 flex items-center gap-3 hidden sm:flex"
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              y: shouldReduceMotion ? 0 : [0, -7, 0],
+            }}
             transition={{
-              duration: shouldReduceMotion ? 0 : 0.35,
-              delay: 0.8,
-              ease: [0.25, 0.46, 0.45, 0.94],
+              opacity: { duration: shouldReduceMotion ? 0 : 0.35, delay: 0.8, ease: [0.25, 0.46, 0.45, 0.94] },
+              scale: { duration: shouldReduceMotion ? 0 : 0.35, delay: 0.8, ease: [0.25, 0.46, 0.45, 0.94] },
+              y: shouldReduceMotion
+                ? { duration: 0 }
+                : { duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.8 },
             }}
           >
             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">

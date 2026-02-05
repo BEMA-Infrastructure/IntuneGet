@@ -27,6 +27,7 @@ import {
   ScrollText,
   Layers,
   Webhook,
+  Lightbulb,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cart-store';
@@ -55,6 +56,7 @@ const navigation: NavItem[] = [
   { name: 'Updates', href: '/dashboard/updates', icon: ArrowUpCircle },
   { name: 'Uploads', href: '/dashboard/uploads', icon: Upload },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
+  { name: 'App Requests', href: '/dashboard/app-requests', icon: Lightbulb },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
@@ -73,7 +75,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, user, signOut } = useMicrosoftAuth();
+  const { isAuthenticated, isSigningOut, user, signOut } = useMicrosoftAuth();
   const { isMspUser } = useMspOptional();
   const {
     isOnboardingComplete,
@@ -104,10 +106,10 @@ export default function DashboardLayout({
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && !isSigningOut) {
       router.push('/auth/signin?callbackUrl=/dashboard');
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, isSigningOut, router]);
 
   // Handle onboarding check results
   useEffect(() => {

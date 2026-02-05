@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { springPresets } from "@/lib/animations/variants";
 
 interface CapabilityCardProps {
   icon: ReactNode;
@@ -52,13 +53,19 @@ export function CapabilityCard({
 
   const styles = colorStyles[color];
 
+  const glowColors = {
+    cyan: "0 0 30px rgba(34, 211, 238, 0.15), 0 0 60px rgba(34, 211, 238, 0.1)",
+    violet: "0 0 30px rgba(124, 58, 237, 0.15), 0 0 60px rgba(124, 58, 237, 0.1)",
+    gradient: "0 0 30px rgba(34, 211, 238, 0.12), 0 0 60px rgba(124, 58, 237, 0.08)",
+  };
+
   return (
     <motion.div
       className={cn(
         "group relative flex flex-col p-5 md:p-6 rounded-xl",
         "bg-white border border-stone-200/60",
         "shadow-card hover:shadow-card-hover",
-        "transition-all duration-300",
+        "transition-shadow duration-300",
         className
       )}
       whileHover={
@@ -66,9 +73,11 @@ export function CapabilityCard({
           ? {}
           : {
               y: -8,
-              transition: { duration: 0.3, ease: "easeOut" },
+              boxShadow: glowColors[color],
+              transition: springPresets.snappy,
             }
       }
+      whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
     >
       {/* Icon container */}
       <div className="relative mb-4">

@@ -21,6 +21,7 @@ export const suggestionSchema = z.object({
   reason: z
     .string()
     .max(500, 'Reason must be 500 characters or less')
+    .transform(sanitizeText)
     .optional()
     .nullable(),
 });
@@ -40,6 +41,7 @@ export const ratingSchema = z.object({
   comment: z
     .string()
     .max(1000, 'Comment must be 1000 characters or less')
+    .transform(sanitizeText)
     .optional()
     .nullable(),
   deployment_success: z.boolean().optional().nullable(),
@@ -62,6 +64,7 @@ export const feedbackSchema = z.object({
   description: z
     .string()
     .max(1000, 'Description must be 1000 characters or less')
+    .transform(sanitizeText)
     .optional()
     .nullable(),
   environment_info: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -127,15 +130,21 @@ export function validateInput<T>(
 
 /**
  * Sanitize string input to prevent XSS
- * Removes potentially dangerous characters
+ * Removes potentially dangerous characters and patterns
  */
 export function sanitizeText(text: string | null | undefined): string {
   if (!text) return '';
 
   return text
-    .replace(/[<>]/g, '') // Remove angle brackets
-    .replace(/javascript:/gi, '') // Remove javascript: protocol
-    .replace(/on\w+=/gi, '') // Remove event handlers
+    .replace(/\0/g, '')                    // Remove null bytes
+    .replace(/[<>]/g, '')                  // Remove angle brackets
+    .replace(/&#\d+;/gi, '')              // Remove numeric HTML entities
+    .replace(/&#x[0-9a-f]+;/gi, '')       // Remove hex HTML entities
+    .replace(/&[a-z]+;/gi, '')            // Remove named HTML entities
+    .replace(/javascript\s*:/gi, '')       // Remove javascript: protocol
+    .replace(/data\s*:/gi, '')             // Remove data: URIs
+    .replace(/vbscript\s*:/gi, '')         // Remove vbscript: protocol
+    .replace(/on\w+\s*=/gi, '')            // Remove event handlers
     .trim();
 }
 

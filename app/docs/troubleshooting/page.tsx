@@ -36,7 +36,7 @@ const faqs = [
   {
     question: "Is IntuneGet really free to self-host?",
     answer:
-      "Yes! IntuneGet is open source under the MIT license. All required services (Supabase, GitHub Actions, Vercel) offer generous free tiers. For most use cases, you won't pay anything. GitHub Actions may incur costs for private repos over 2,000 minutes/month.",
+      "Yes! IntuneGet is completely free and open source. All required services (Supabase, GitHub Actions, Vercel) offer generous free tiers. For most use cases, you won't pay anything. GitHub Actions may incur costs for private repos over 2,000 minutes/month.",
   },
   {
     question: "Do I need admin access to create the Azure AD app registration?",

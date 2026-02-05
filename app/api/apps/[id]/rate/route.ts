@@ -40,7 +40,7 @@ interface RatingQueryResult {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Rate limit by IP for public access
-    const rateLimitResponse = applyRateLimit(getIpKey(request), PUBLIC_RATE_LIMIT);
+    const rateLimitResponse = await applyRateLimit(getIpKey(request), PUBLIC_RATE_LIMIT);
     if (rateLimitResponse) return rateLimitResponse;
 
     const { id: appId } = await params;
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }));
 
     // Get user's rating if authenticated
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     let userRating = null;
 
     if (user) {
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Rate limit by user
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );

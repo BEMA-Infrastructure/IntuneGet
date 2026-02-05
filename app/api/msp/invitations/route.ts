@@ -76,7 +76,7 @@ interface ExistingMemberCheck {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );
@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },

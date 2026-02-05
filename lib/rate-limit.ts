@@ -1,9 +1,10 @@
 /**
  * Rate Limiting Middleware
- * Simple in-memory rate limiter for API endpoints
+ * Supabase-backed rate limiter with in-memory fallback
  */
 
 import { NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
 
 // ============================================
 // Types
@@ -24,14 +25,11 @@ interface RateLimitEntry {
 }
 
 // ============================================
-// Rate Limit Store
+// In-Memory Fallback Store
 // ============================================
 
-// In-memory store for rate limiting
-// In production, consider using Redis for distributed rate limiting
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-// Clean up expired entries periodically (every 5 minutes)
 const CLEANUP_INTERVAL = 5 * 60 * 1000;
 let lastCleanup = Date.now();
 
@@ -51,25 +49,16 @@ function cleanupExpiredEntries(): void {
 // Default Key Generators
 // ============================================
 
-/**
- * Generate rate limit key from user ID (for authenticated endpoints)
- */
 export function getUserKey(userId: string): string {
   return `user:${userId}`;
 }
 
-/**
- * Generate rate limit key from IP address (for public endpoints)
- */
 export function getIpKey(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0].trim() : 'unknown';
   return `ip:${ip}`;
 }
 
-/**
- * Generate rate limit key from organization ID (for MSP endpoints)
- */
 export function getOrgKey(orgId: string): string {
   return `org:${orgId}`;
 }
@@ -81,35 +70,31 @@ export function getOrgKey(orgId: string): string {
 /** Community endpoints: 10 requests/minute per user */
 export const COMMUNITY_RATE_LIMIT: RateLimitConfig = {
   limit: 10,
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
 };
 
 /** MSP API endpoints: 60 requests/minute per organization */
 export const MSP_RATE_LIMIT: RateLimitConfig = {
   limit: 60,
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
 };
 
 /** Public endpoints: 30 requests/minute per IP */
 export const PUBLIC_RATE_LIMIT: RateLimitConfig = {
   limit: 30,
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
 };
 
 /** Strict limit for sensitive operations: 5 requests/minute */
 export const STRICT_RATE_LIMIT: RateLimitConfig = {
   limit: 5,
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
 };
 
 // ============================================
 // Rate Limiting Functions
 // ============================================
 
-/**
- * Check if a request should be rate limited
- * Returns null if allowed, or RateLimitResult if exceeded
- */
 export interface RateLimitResult {
   limited: boolean;
   limit: number;
@@ -117,13 +102,41 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
+/**
+ * Check rate limit via Supabase RPC (atomic, distributed)
+ */
+async function checkRateLimitDB(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+  const supabase = createServerClient();
+
+  const { data, error } = await supabase.rpc('check_rate_limit', {
+    p_key: key,
+    p_window_ms: config.windowMs,
+    p_limit: config.limit,
+  });
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Rate limit RPC returned no data');
+  }
+
+  const result = data as unknown as { limited: boolean; remaining: number; reset_at: number };
+
+  return {
+    limited: result.limited,
+    limit: config.limit,
+    remaining: result.remaining,
+    resetAt: result.reset_at,
+  };
+}
+
+/**
+ * In-memory rate limit check (fallback)
+ */
+function checkRateLimitMemory(key: string, config: RateLimitConfig): RateLimitResult {
   cleanupExpiredEntries();
 
   const now = Date.now();
   let entry = rateLimitStore.get(key);
 
-  // Initialize or reset if window has passed
   if (!entry || entry.resetAt < now) {
     entry = {
       count: 0,
@@ -132,7 +145,6 @@ export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitR
     rateLimitStore.set(key, entry);
   }
 
-  // Increment count
   entry.count++;
 
   const remaining = Math.max(0, config.limit - entry.count);
@@ -147,14 +159,25 @@ export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitR
 }
 
 /**
- * Apply rate limiting and return appropriate response if exceeded
- * Returns null if not rate limited, or a NextResponse if rate limited
+ * Check rate limit with Supabase backend, falling back to in-memory
  */
-export function applyRateLimit(
+export async function checkRateLimit(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+  try {
+    return await checkRateLimitDB(key, config);
+  } catch {
+    return checkRateLimitMemory(key, config);
+  }
+}
+
+/**
+ * Apply rate limiting and return appropriate response if exceeded.
+ * Returns null if not rate limited, or a NextResponse if rate limited.
+ */
+export async function applyRateLimit(
   key: string,
   config: RateLimitConfig
-): NextResponse | null {
-  const result = checkRateLimit(key, config);
+): Promise<NextResponse | null> {
+  const result = await checkRateLimit(key, config);
 
   if (result.limited) {
     const retryAfter = Math.ceil((result.resetAt - Date.now()) / 1000);
@@ -183,14 +206,13 @@ export function applyRateLimit(
 /**
  * Add rate limit headers to a successful response
  */
-export function addRateLimitHeaders(
+export async function addRateLimitHeaders(
   response: NextResponse,
   key: string,
   config: RateLimitConfig
-): NextResponse {
-  const result = checkRateLimit(key, config);
+): Promise<NextResponse> {
+  const result = await checkRateLimit(key, config);
 
-  // Decrement since we already counted this request
   const remaining = Math.max(0, result.remaining);
 
   response.headers.set('X-RateLimit-Limit', config.limit.toString());
@@ -206,12 +228,6 @@ export function addRateLimitHeaders(
 
 type RouteHandler = (request: Request) => Promise<NextResponse>;
 
-/**
- * Wrap a route handler with rate limiting
- * @param handler The route handler function
- * @param config Rate limit configuration
- * @param keyGenerator Function to generate the rate limit key from the request
- */
 export function withRateLimit(
   handler: RouteHandler,
   config: RateLimitConfig,
@@ -220,12 +236,11 @@ export function withRateLimit(
   return async (request: Request) => {
     const key = keyGenerator(request);
 
-    // If no key (e.g., unauthenticated), skip rate limiting
     if (!key) {
       return handler(request);
     }
 
-    const rateLimitResponse = applyRateLimit(key, config);
+    const rateLimitResponse = await applyRateLimit(key, config);
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
@@ -238,40 +253,35 @@ export function withRateLimit(
 // Utility Functions
 // ============================================
 
-/**
- * Reset rate limit for a specific key (useful for testing)
- */
 export function resetRateLimit(key: string): void {
   rateLimitStore.delete(key);
 }
 
-/**
- * Get current rate limit status for a key
- */
-export function getRateLimitStatus(key: string, config: RateLimitConfig): RateLimitResult {
-  const entry = rateLimitStore.get(key);
-  const now = Date.now();
+export async function getRateLimitStatus(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+  try {
+    return await checkRateLimitDB(key, config);
+  } catch {
+    const entry = rateLimitStore.get(key);
+    const now = Date.now();
 
-  if (!entry || entry.resetAt < now) {
+    if (!entry || entry.resetAt < now) {
+      return {
+        limited: false,
+        limit: config.limit,
+        remaining: config.limit,
+        resetAt: now + config.windowMs,
+      };
+    }
+
     return {
-      limited: false,
+      limited: entry.count >= config.limit,
       limit: config.limit,
-      remaining: config.limit,
-      resetAt: now + config.windowMs,
+      remaining: Math.max(0, config.limit - entry.count),
+      resetAt: entry.resetAt,
     };
   }
-
-  return {
-    limited: entry.count >= config.limit,
-    limit: config.limit,
-    remaining: Math.max(0, config.limit - entry.count),
-    resetAt: entry.resetAt,
-  };
 }
 
-/**
- * Clear all rate limits (useful for testing)
- */
 export function clearAllRateLimits(): void {
   rateLimitStore.clear();
 }

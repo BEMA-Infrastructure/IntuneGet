@@ -12,7 +12,7 @@ const faqs = [
   {
     question: "Is IntuneGet really free and open source?",
     answer:
-      "Yes! IntuneGet is completely free and open source under the MIT license. You can use it without any cost, modify it to fit your needs, and contribute to its development. We believe in making IT management tools accessible to everyone.",
+      "Yes! IntuneGet is completely free and open source. You can use it without any cost, modify it to fit your needs, and contribute to its development. We believe in making IT management tools accessible to everyone.",
   },
   {
     question: "Which applications are supported?",

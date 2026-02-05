@@ -8,8 +8,8 @@ import { Menu, X, Github, Star, Apple, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How It Works" },
+  { href: "/#features", label: "Features" },
+  { href: "/#how-it-works", label: "How It Works" },
 ];
 
 export function Header() {

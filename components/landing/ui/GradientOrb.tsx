@@ -40,16 +40,19 @@ export function GradientOrb({
     high: 0.35,
   };
 
+  const baseOpacity = intensityOpacity[intensity];
   const animationVariants: Variants = {
     initial: {
       scale: 1,
       x: 0,
       y: 0,
+      opacity: baseOpacity,
     },
     animate: {
-      scale: [1, 1.05, 0.98, 1.02, 1],
-      x: [0, 10, -8, 5, 0],
-      y: [0, -12, 8, -5, 0],
+      scale: [1, 1.08, 0.95, 1.04, 1],
+      x: [0, 18, -14, 8, 0],
+      y: [0, -20, 14, -8, 0],
+      opacity: [baseOpacity, baseOpacity + 0.05, baseOpacity - 0.03, baseOpacity + 0.03, baseOpacity],
       transition: {
         duration: 10,
         repeat: Infinity,
@@ -68,7 +71,7 @@ export function GradientOrb({
         className
       )}
       style={{
-        opacity: intensityOpacity[intensity],
+        opacity: animate && !shouldReduceMotion ? undefined : baseOpacity,
         background: `radial-gradient(circle, ${
           color === "cyan"
             ? "rgba(8, 145, 178, 0.15)"

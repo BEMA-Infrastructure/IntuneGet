@@ -11,6 +11,27 @@ import { generateDetectionRules, generateInstallCommand, generateUninstallComman
 import { DEFAULT_PSADT_CONFIG, getDefaultProcessesToClose } from '@/types/psadt';
 import { toast } from '@/hooks/use-toast';
 
+const installerTypeStyles: Record<string, string> = {
+  msi: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
+  wix: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
+  msix: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
+  appx: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
+  exe: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
+  inno: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
+  nullsoft: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
+  burn: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
+  zip: 'text-slate-600 bg-slate-500/10 border-slate-500/20',
+  portable: 'text-slate-600 bg-slate-500/10 border-slate-500/20',
+};
+
+function getInstallerLabel(type: string): string {
+  const upper = type.toUpperCase();
+  if (upper === 'NULLSOFT' || upper === 'INNO' || upper === 'BURN') return 'EXE';
+  if (upper === 'WIX') return 'MSI';
+  if (upper === 'APPX') return 'MSIX';
+  return upper;
+}
+
 interface AppCardProps {
   package: NormalizedPackage;
   onSelect?: (pkg: NormalizedPackage) => void;
@@ -96,7 +117,7 @@ function AppCardComponent({ package: pkg, onSelect }: AppCardProps) {
   return (
     <div
       onClick={() => onSelect?.(pkg)}
-      className="group glass-light rounded-xl p-5 cursor-pointer contain-layout transition-all duration-300 hover:shadow-xl hover:shadow-accent-cyan/5 hover:border-black/10 hover:-translate-y-0.5"
+      className="group glass-light rounded-xl p-5 cursor-pointer contain-layout transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 hover:scale-[1.02] hover:border-accent-cyan/20"
     >
       <div className="flex items-start gap-4">
         {/* App icon - larger size with hover effect */}
@@ -119,7 +140,10 @@ function AppCardComponent({ package: pkg, onSelect }: AppCardProps) {
               <h3 className="text-text-primary font-semibold text-base truncate group-hover:text-accent-cyan-bright transition-colors">
                 {pkg.name}
               </h3>
-              <p className="text-text-muted text-sm truncate">{pkg.publisher}</p>
+              <p className="text-text-muted text-sm truncate">
+                {pkg.publisher}
+                {pkg.id && <span className="text-text-muted/60 font-mono text-xs ml-1.5">{pkg.id}</span>}
+              </p>
             </div>
             {/* Version badge */}
             <span className="text-xs text-text-secondary bg-bg-elevated px-2.5 py-1 rounded-md flex-shrink-0 border border-black/5 group-hover:border-accent-cyan/20 transition-colors">
@@ -133,14 +157,21 @@ function AppCardComponent({ package: pkg, onSelect }: AppCardProps) {
             </p>
           )}
 
-          {/* Category badge and Package ID */}
-          <div className="flex items-center gap-2 mt-3">
+          {/* Category badge, Popularity badge, and Installer type */}
+          <div className="flex items-center flex-wrap gap-1.5 mt-3">
             {pkg.category && (
               <CategoryBadge category={pkg.category} />
             )}
-            <p className="text-text-muted text-xs font-mono truncate group-hover:text-text-muted transition-colors">
-              {pkg.id}
-            </p>
+            {pkg.popularityRank != null && pkg.popularityRank <= 100 && (
+              <span className="text-xs font-medium text-accent-violet bg-accent-violet/10 px-2 py-0.5 rounded-full">
+                Top {pkg.popularityRank}
+              </span>
+            )}
+            {pkg.installerType && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${installerTypeStyles[pkg.installerType.toLowerCase()] || 'text-text-secondary bg-bg-elevated border-black/10'}`}>
+                {getInstallerLabel(pkg.installerType)}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -168,7 +199,7 @@ function AppCardComponent({ package: pkg, onSelect }: AppCardProps) {
           className={
             inCart
               ? 'bg-status-success/10 text-status-success hover:bg-status-success/10 cursor-default border-0'
-              : 'bg-gradient-to-r from-accent-cyan to-accent-violet hover:opacity-90 text-text-primary border-0 shadow-glow-cyan'
+              : 'bg-accent-cyan hover:bg-accent-cyan-dim text-white border-0'
           }
         >
           {isLoading ? (

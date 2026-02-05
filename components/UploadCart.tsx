@@ -7,7 +7,6 @@ import {
   ShoppingCart,
   Trash2,
   Upload,
-  Package,
   ChevronRight,
   AlertCircle,
   Loader2,
@@ -15,6 +14,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AppIcon } from '@/components/AppIcon';
 import { useCartStore } from '@/stores/cart-store';
 import { CartItemConfig } from '@/components/CartItemConfig';
 import type { CartItem } from '@/types/upload';
@@ -186,9 +186,12 @@ export function UploadCart() {
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-bg-elevated to-bg-surface flex items-center justify-center flex-shrink-0 border border-black/5">
-                      <Package className="w-5 h-5 text-text-muted" />
-                    </div>
+                    <AppIcon
+                      packageId={item.wingetId}
+                      packageName={item.displayName}
+                      size="md"
+                      className="flex-shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-text-primary font-medium truncate">
                         {item.displayName}
@@ -262,19 +265,6 @@ export function UploadCart() {
               </div>
             )}
 
-            {/* Warning */}
-            <div className="flex items-start gap-3 p-3 bg-status-warning/10 border border-status-warning/20 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-status-warning flex-shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="text-status-warning font-medium">
-                  Deployment will start immediately
-                </p>
-                <p className="text-status-warning/70 mt-1">
-                  Packages will be processed via Azure DevOps and uploaded to your Intune tenant.
-                </p>
-              </div>
-            </div>
-
             {/* Auth warning if not signed in */}
             {!isAuthenticated && (
               <div className="flex items-start gap-3 p-3 bg-accent-cyan/10 border border-accent-cyan/20 rounded-lg">
@@ -303,10 +293,10 @@ export function UploadCart() {
               <Button
                 onClick={isAuthenticated && !canDeploy && permissionStatus !== 'checking' ? handleFixPermissions : handleDeploy}
                 disabled={isDeploying || (isAuthenticated && permissionStatus === 'checking')}
-                className={`flex-1 text-text-primary border-0 disabled:opacity-50 ${
+                className={`flex-1 text-white border-0 disabled:opacity-50 ${
                   isAuthenticated && !canDeploy && permissionStatus !== 'checking'
                     ? 'bg-status-error hover:bg-status-error/90'
-                    : 'bg-gradient-to-r from-accent-cyan to-accent-violet hover:opacity-90 shadow-glow-cyan'
+                    : 'bg-accent-cyan hover:bg-accent-cyan-dim'
                 }`}
               >
                 {isDeploying ? (

@@ -24,7 +24,7 @@ interface RouteParams {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Rate limit by user
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -146,7 +146,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Rate limit by user
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );

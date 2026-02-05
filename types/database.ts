@@ -1791,17 +1791,6 @@ export interface Database {
         };
         Relationships: GenericRelationship[];
       };
-      community_leaderboard: {
-        Row: {
-          user_email: string;
-          suggestions_count: number;
-          votes_cast: number;
-          feedback_count: number;
-          ratings_count: number;
-          score: number;
-        };
-        Relationships: GenericRelationship[];
-      };
       notification_stats: {
         Row: {
           user_id: string;
@@ -1840,6 +1829,18 @@ export interface Database {
           p_metric_type: string;
         };
         Returns: void;
+      };
+      check_rate_limit: {
+        Args: {
+          p_key: string;
+          p_window_ms: number;
+          p_limit: number;
+        };
+        Returns: {
+          limited: boolean;
+          remaining: number;
+          reset_at: number;
+        };
       };
     };
     Enums: {

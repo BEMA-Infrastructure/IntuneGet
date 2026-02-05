@@ -151,32 +151,6 @@ export function ProblemOutcomeSection() {
           </FadeIn>
         </div>
 
-        {/* Bottom stats */}
-        <FadeIn delay={0.3}>
-          <div className="mt-12 md:mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {[
-              { value: "10+", label: "Hours saved per deployment" },
-              { value: "0", label: "Lines of code required" },
-              { value: "99.9%", label: "Deployment success rate" },
-              { value: "24/7", label: "Automated monitoring" },
-            ].map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                className="text-center"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{
-                  duration: shouldReduceMotion ? 0 : 0.3,
-                  delay: shouldReduceMotion ? 0 : 0.4 + index * 0.1,
-                }}
-              >
-                <div className="text-3xl md:text-4xl font-bold text-stone-900 mb-1">{stat.value}</div>
-                <div className="text-sm text-stone-500">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </FadeIn>
       </div>
     </section>
   );

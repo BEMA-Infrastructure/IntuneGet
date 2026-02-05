@@ -75,7 +75,7 @@ interface WebhookUpdateInput {
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -311,7 +311,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },

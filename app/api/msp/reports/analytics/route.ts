@@ -81,7 +81,7 @@ interface AnalyticsResponse {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },

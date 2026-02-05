@@ -75,7 +75,7 @@ export function AppCollection({ category, onSelect, onSeeAll }: AppCollectionPro
   const scroll = (direction: 'left' | 'right') => {
     const container = scrollRef.current;
     if (container) {
-      const cardWidth = 220; // Approximate card width + gap
+      const cardWidth = 256; // Approximate card width + gap
       const scrollAmount = cardWidth * 2;
       container.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
@@ -94,7 +94,7 @@ export function AppCollection({ category, onSelect, onSeeAll }: AppCollectionPro
         </div>
         <div className="flex gap-4 overflow-hidden">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex-shrink-0 w-52 h-28 glass-light rounded-xl animate-shimmer" />
+            <div key={i} className="flex-shrink-0 w-60 h-28 glass-light rounded-xl animate-shimmer" />
           ))}
         </div>
       </div>
@@ -107,7 +107,7 @@ export function AppCollection({ category, onSelect, onSeeAll }: AppCollectionPro
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+        <h3 className="text-xl font-bold tracking-tight text-text-primary flex items-center gap-2">
           <span className={cn('w-1.5 h-5 rounded-full bg-gradient-to-b', style.gradient)} />
           {displayName}
         </h3>
@@ -153,7 +153,7 @@ export function AppCollection({ category, onSelect, onSeeAll }: AppCollectionPro
           {packages.length >= 10 && onSeeAll && (
             <button
               onClick={() => onSeeAll(category)}
-              className="flex-shrink-0 w-52 snap-start glass-light rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-black/5 transition-colors border border-dashed border-black/10"
+              className="flex-shrink-0 w-60 snap-start glass-light rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-black/5 transition-colors border border-dashed border-black/10"
             >
               <div className="w-12 h-12 rounded-xl bg-bg-elevated flex items-center justify-center">
                 <ArrowRight className="w-6 h-6 text-text-secondary" />
@@ -247,7 +247,7 @@ function CollectionCardComponent({ package: pkg, onSelect }: CollectionCardProps
   return (
     <div
       onClick={() => onSelect?.(pkg)}
-      className="flex-shrink-0 w-52 snap-start group glass-light rounded-xl p-4 cursor-pointer transition-all duration-200 hover:bg-black/5 hover:shadow-lg hover:shadow-black/20"
+      className="flex-shrink-0 w-60 snap-start group glass-light rounded-xl p-4 cursor-pointer transition-all duration-200 hover:bg-black/5 hover:shadow-card hover:-translate-y-0.5"
     >
       <div className="flex items-start gap-3">
         <AppIcon

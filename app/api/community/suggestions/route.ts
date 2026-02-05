@@ -28,7 +28,7 @@ import {
 export async function GET(request: NextRequest) {
   try {
     // Rate limit by IP for public access
-    const rateLimitResponse = applyRateLimit(getIpKey(request), PUBLIC_RATE_LIMIT);
+    const rateLimitResponse = await applyRateLimit(getIpKey(request), PUBLIC_RATE_LIMIT);
     if (rateLimitResponse) return rateLimitResponse;
 
     // Parse query parameters
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current user's votes if authenticated
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     let userVotes: string[] = [];
 
     if (user && suggestions && suggestions.length > 0) {
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit by user
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );

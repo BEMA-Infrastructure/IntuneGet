@@ -35,10 +35,10 @@ interface InvitationWithOrgName extends Pick<MspInvitationRow, 'email' | 'role' 
 export async function POST(request: NextRequest) {
   try {
     // Strict rate limiting for invitation acceptance (security measure)
-    const rateLimitResponse = applyRateLimit(getIpKey(request), STRICT_RATE_LIMIT);
+    const rateLimitResponse = await applyRateLimit(getIpKey(request), STRICT_RATE_LIMIT);
     if (rateLimitResponse) return rateLimitResponse;
 
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required. Please sign in with Microsoft.' },

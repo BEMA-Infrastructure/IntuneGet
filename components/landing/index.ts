@@ -7,15 +7,15 @@ export {
   FeaturesSection,
   AdvancedCapabilitiesSection,
   HowItWorksSection,
-  StatsSection,
   FAQSectionAnimated,
   CTASection,
   Footer,
   TrustSection,
-  TestimonialsSection,
-  CustomerLogosSection,
   ProblemOutcomeSection,
   DemoSection,
+  ComparisonSection,
+  MissionSection,
+  QuickFactsSection,
 } from "./sections";
 
 // Animation primitives
@@ -39,7 +39,6 @@ export {
   CategoryHeader,
   CategoryRow,
   CategoryRowItem,
-  ProductShowcase,
-  TestimonialCard,
   LogoBar,
+  GitHubStatsBar,
 } from "./ui";

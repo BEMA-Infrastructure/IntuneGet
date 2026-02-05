@@ -27,7 +27,7 @@ type DetectionRuleFeedbackInsert = Database['public']['Tables']['detection_rule_
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit by user
-    const rateLimitResponse = applyRateLimit(
+    const rateLimitResponse = await applyRateLimit(
       getUserKey(user.userId),
       COMMUNITY_RATE_LIMIT
     );
@@ -88,6 +88,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
+      if (insertError.code === '23505') {
+        return NextResponse.json(
+          { error: 'You have already submitted this type of feedback for this app' },
+          { status: 409 }
+        );
+      }
+      console.error('[detection-feedback] Failed to submit feedback:', insertError.message);
       return NextResponse.json(
         { error: 'Failed to submit feedback' },
         { status: 500 }
@@ -101,7 +108,8 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch {
+  } catch (err) {
+    console.error('[detection-feedback] POST error:', err);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -115,13 +123,20 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = parseAccessToken(request.headers.get('Authorization'));
+    const user = await parseAccessToken(request.headers.get('Authorization'));
     if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
+
+    // Rate limit GET handler
+    const getRateLimitResponse = await applyRateLimit(
+      getUserKey(user.userId),
+      COMMUNITY_RATE_LIMIT
+    );
+    if (getRateLimitResponse) return getRateLimitResponse;
 
     const { searchParams } = new URL(request.url);
     const appId = searchParams.get('app_id');
@@ -150,6 +165,7 @@ export async function GET(request: NextRequest) {
     const { data: feedback, error } = await query;
 
     if (error) {
+      console.error('[detection-feedback] Failed to fetch feedback:', error.message);
       return NextResponse.json(
         { error: 'Failed to fetch feedback' },
         { status: 500 }
@@ -162,7 +178,8 @@ export async function GET(request: NextRequest) {
     ) || [];
 
     return NextResponse.json({ feedback: filteredFeedback });
-  } catch {
+  } catch (err) {
+    console.error('[detection-feedback] GET error:', err);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

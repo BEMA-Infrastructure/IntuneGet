@@ -9,7 +9,7 @@ interface AppIconProps {
   packageId: string;
   packageName: string;
   iconPath?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   className?: string;
   showFallbackIcon?: boolean;
 }
@@ -19,6 +19,7 @@ const sizeClasses = {
   md: 'w-10 h-10',
   lg: 'w-12 h-12',
   xl: 'w-16 h-16',
+  '2xl': 'w-20 h-20',
 };
 
 const iconSizeClasses = {
@@ -26,6 +27,7 @@ const iconSizeClasses = {
   md: 'w-5 h-5',
   lg: 'w-6 h-6',
   xl: 'w-8 h-8',
+  '2xl': 'w-10 h-10',
 };
 
 const imageSizes = {
@@ -33,6 +35,7 @@ const imageSizes = {
   md: 32,
   lg: 64,
   xl: 128,
+  '2xl': 128,
 };
 
 export function AppIcon({

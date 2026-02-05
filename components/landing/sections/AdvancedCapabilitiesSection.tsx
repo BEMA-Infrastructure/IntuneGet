@@ -3,19 +3,17 @@
 import {
   Sparkles,
   RefreshCw,
-  Lightbulb,
   Bell,
   ShieldCheck,
-  Key,
   Search,
-  CheckCircle,
   BarChart3,
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { FadeIn } from "../animations/FadeIn";
-import { GradientOrb } from "../ui/GradientOrb";
-import { GridBackground } from "../ui/GridBackground";
+import { SlideIn } from "../animations/SlideIn";
 import { CapabilityCard } from "../ui/CapabilityCard";
 import { CategoryRow, CategoryRowItem } from "../ui/CategoryRow";
+import { scaleIn } from "@/lib/animations/variants";
 
 const intelligentAutomation = [
   {
@@ -32,13 +30,6 @@ const intelligentAutomation = [
       "Configure update policies with auto_update, notify, ignore, or pin_version modes.",
     features: ["Circuit breakers", "Rate limiting", "Update history"],
   },
-  {
-    icon: <Lightbulb className="h-5 w-5" />,
-    title: "Package Suggestions",
-    description:
-      "Get alternative package recommendations when exact Winget ID matches aren't found.",
-    features: ["Publisher-based suggestions", "Smart alternatives", "Quick selection"],
-  },
 ];
 
 const enterpriseNotifications = [
@@ -53,15 +44,8 @@ const enterpriseNotifications = [
     icon: <ShieldCheck className="h-5 w-5" />,
     title: "Pre-Upload Permission Check",
     description:
-      "Verify all required permissions before starting deployment to avoid mid-process failures.",
-    features: ["Early detection", "Clear error messages", "Time savings"],
-  },
-  {
-    icon: <Key className="h-5 w-5" />,
-    title: "Granular Permission Verification",
-    description:
-      "Tests actual API access, not just role membership, with a dedicated Check Permissions button.",
-    features: ["Real API testing", "Troubleshooting help", "Access validation"],
+      "Verify all required permissions before starting deployment. Tests actual API access, not just role membership, to avoid mid-process failures.",
+    features: ["Early detection", "Real API testing", "Clear error messages"],
   },
 ];
 
@@ -74,13 +58,6 @@ const workflowOptimization = [
     features: ["Faster discovery", "Flexible matching", "Better UX"],
   },
   {
-    icon: <CheckCircle className="h-5 w-5" />,
-    title: "Job Management",
-    description:
-      "Dismiss completed or failed jobs from your uploads list for a cleaner workflow.",
-    features: ["Clean interface", "Status tracking", "Batch management"],
-  },
-  {
     icon: <BarChart3 className="h-5 w-5" />,
     title: "Real-time Statistics",
     description:
@@ -90,41 +67,32 @@ const workflowOptimization = [
 ];
 
 export function AdvancedCapabilitiesSection() {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <section
       id="advanced-capabilities"
       className="relative w-full py-20 md:py-28 overflow-hidden"
     >
-      {/* Background */}
-      <GridBackground variant="grid" opacity={0.15} className="absolute inset-0" />
-
-      {/* Gradient orbs */}
-      <GradientOrb
-        color="cyan"
-        size="lg"
-        className="-right-48 top-1/4"
-        intensity="low"
-      />
-      <GradientOrb
-        color="violet"
-        size="md"
-        className="-left-24 bottom-1/3"
-        intensity="low"
-      />
-
       <div className="container relative px-4 md:px-6 mx-auto max-w-7xl">
-        {/* Section header */}
+        {/* Section header - ScaleIn tag + SlideIn headline */}
         <div className="text-center mb-14 md:mb-18 space-y-4">
-          <FadeIn>
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 0 } : "hidden"}
+            whileInView={shouldReduceMotion ? { opacity: 1 } : "visible"}
+            viewport={{ once: true, amount: 0.3 }}
+            variants={shouldReduceMotion ? undefined : scaleIn}
+            transition={shouldReduceMotion ? { duration: 0 } : undefined}
+          >
             <span className="inline-block font-mono text-xs tracking-wider text-accent-cyan uppercase mb-4">
               Advanced Capabilities
             </span>
-          </FadeIn>
-          <FadeIn delay={0.1}>
+          </motion.div>
+          <SlideIn direction="up" distance={30} duration={0.5} delay={0.1}>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-stone-900">
               Enterprise-Grade Automation
             </h2>
-          </FadeIn>
+          </SlideIn>
           <FadeIn delay={0.2}>
             <p className="mx-auto max-w-2xl text-lg text-stone-600">
               Powerful features built for IT teams managing deployments at scale

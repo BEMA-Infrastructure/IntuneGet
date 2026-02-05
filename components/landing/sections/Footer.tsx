@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Github, Twitter, Linkedin, MessageCircle, Mail, ArrowRight, ExternalLink, Apple } from "lucide-react";
+import { Github, Twitter, Linkedin, ExternalLink, Apple } from "lucide-react";
 import { FadeIn } from "../animations/FadeIn";
-import { useState } from "react";
 
 const footerLinks = {
   product: [
-    { label: "Features", href: "#features" },
-    { label: "How It Works", href: "#how-it-works" },
-    { label: "Demo", href: "#demo" },
-    { label: "Pricing", href: "#", badge: "Free" },
+    { label: "Features", href: "/#features" },
+    { label: "How It Works", href: "/#how-it-works" },
+    { label: "Documentation", href: "/docs" },
+  ],
+  community: [
+    { label: "App Requests", href: "/dashboard/app-requests" },
   ],
   company: [
-    { label: "About", href: "https://ugurlabs.com", external: true },
+    { label: "About", href: "/about" },
+    { label: "Changelog", href: "/changelog" },
     { label: "Contact", href: "mailto:hello@ugurlabs.com" },
   ],
   legal: [
@@ -29,33 +31,21 @@ const footerLinks = {
 const socialLinks = [
   { icon: Twitter, href: "https://x.com/intikidev", label: "Twitter / X" },
   { icon: Linkedin, href: "https://linkedin.com/in/intiki", label: "LinkedIn" },
-  { icon: MessageCircle, href: "https://github.com/ugurkocde/IntuneGet/discussions", label: "Community" },
   { icon: Github, href: "https://github.com/ugurkocde/IntuneGet", label: "GitHub" },
 ];
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
-
-  const handleNewsletterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // In production, this would submit to a newsletter service
-    if (email) {
-      setSubscribed(true);
-      setEmail("");
-    }
-  };
 
   return (
     <footer className="relative w-full bg-white border-t border-stone-200/60">
       {/* Main footer content */}
       <div className="container relative px-4 md:px-6 mx-auto max-w-7xl py-12 md:py-16">
         <FadeIn>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-8 md:gap-12">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-8 md:gap-10">
             {/* Brand column */}
             <div className="col-span-2">
-              <Link href="#" className="flex items-center gap-2 group mb-4">
+              <Link href="/" className="flex items-center gap-2 group mb-4">
                 <div className="relative">
                   <Image
                     src="/favicon.svg"
@@ -70,32 +60,6 @@ export function Footer() {
               <p className="text-sm text-stone-500 mb-6 max-w-xs">
                 Deploy any app from Winget to Intune in minutes. Free, open source, and trusted by IT teams worldwide.
               </p>
-
-              {/* Newsletter signup */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-stone-900 mb-3">Stay updated</h4>
-                {subscribed ? (
-                  <p className="text-sm text-emerald-600">Thanks for subscribing!</p>
-                ) : (
-                  <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Enter your email"
-                      className="flex-1 px-3 py-2 text-sm bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-cyan/20 focus:border-accent-cyan transition-all"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors"
-                      aria-label="Subscribe to newsletter"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </form>
-                )}
-              </div>
 
               {/* Social links */}
               <div className="flex items-center gap-3">
@@ -122,15 +86,39 @@ export function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center gap-2"
+                      className="text-sm text-stone-500 hover:text-stone-900 transition-colors"
                     >
                       {link.label}
-                      {link.badge && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded">
-                          {link.badge}
-                        </span>
-                      )}
                     </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Community links */}
+            <div>
+              <h4 className="text-sm font-semibold text-stone-900 mb-4">Community</h4>
+              <ul className="space-y-3">
+                {footerLinks.community.map((link) => (
+                  <li key={link.label}>
+                    {link.href.startsWith("http") ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center gap-1"
+                      >
+                        {link.label}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-sm text-stone-500 hover:text-stone-900 transition-colors"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -142,15 +130,21 @@ export function Footer() {
               <ul className="space-y-3">
                 {footerLinks.company.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      target={link.external ? "_blank" : undefined}
-                      rel={link.external ? "noopener noreferrer" : undefined}
-                      className="text-sm text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center gap-1"
-                    >
-                      {link.label}
-                      {link.external && <ExternalLink className="w-3 h-3" />}
-                    </a>
+                    {link.href.startsWith("mailto:") ? (
+                      <a
+                        href={link.href}
+                        className="text-sm text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center gap-1"
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-sm text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center gap-1"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -219,7 +213,7 @@ export function Footer() {
                 </a>
               </p>
               <p className="text-center md:text-right">
-                Open source under MIT License. Star us on{" "}
+                Open source. Star us on{" "}
                 <a
                   href="https://github.com/ugurkocde/IntuneGet"
                   target="_blank"

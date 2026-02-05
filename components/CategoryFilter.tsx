@@ -180,7 +180,7 @@ export function CategoryBadge({ category, className }: CategoryBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20',
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-accent-cyan/10 text-accent-cyan',
         className
       )}
     >

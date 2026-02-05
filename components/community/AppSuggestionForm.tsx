@@ -22,7 +22,6 @@ interface AppSuggestion {
 
 export function AppSuggestionForm({ onSuccess, onCancel }: AppSuggestionFormProps) {
   const [wingetId, setWingetId] = useState('');
-  const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +75,7 @@ export function AppSuggestionForm({ onSuccess, onCancel }: AppSuggestionFormProp
         },
         body: JSON.stringify({
           winget_id: wingetId.trim(),
-          reason: reason.trim() || null,
+          reason: null,
         }),
       });
 
@@ -98,7 +97,6 @@ export function AppSuggestionForm({ onSuccess, onCancel }: AppSuggestionFormProp
       });
 
       setWingetId('');
-      setReason('');
       onSuccess?.(data.suggestion);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to submit suggestion');
@@ -154,35 +152,13 @@ export function AppSuggestionForm({ onSuccess, onCancel }: AppSuggestionFormProp
           </p>
         </div>
 
-        <div>
-          <label
-            htmlFor="reason"
-            className="block text-sm font-medium text-text-secondary mb-1"
-          >
-            Why should we add this app? (optional)
-          </label>
-          <textarea
-            id="reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Tell us why this app would be useful..."
-            rows={3}
-            maxLength={500}
-            className="w-full px-3 py-2 bg-black/5 border border-black/10 rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-cyan/50 focus:ring-1 focus:ring-accent-cyan/30 resize-none"
-            disabled={isSubmitting}
-          />
-          <p className="mt-1 text-xs text-text-muted text-right">
-            {reason.length}/500
-          </p>
-        </div>
-
         {error && (
           <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
             {error}
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex flex-col items-end gap-2">
           <Button
             type="submit"
             disabled={isSubmitting || !isAuthenticated}
@@ -200,6 +176,11 @@ export function AppSuggestionForm({ onSuccess, onCancel }: AppSuggestionFormProp
               </>
             )}
           </Button>
+          {!isAuthenticated && (
+            <p className="text-xs text-text-muted">
+              Sign in to submit a suggestion.
+            </p>
+          )}
         </div>
       </form>
     </div>
