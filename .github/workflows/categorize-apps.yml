@@ -1,0 +1,110 @@
+name: Categorize Curated Apps
+
+on:
+  schedule:
+    # Run weekly on Sundays at 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scope of categorization'
+        required: false
+        default: 'uncategorized'
+        type: choice
+        options:
+          - uncategorized
+          - all
+      limit:
+        description: 'Maximum number of apps to process'
+        required: false
+        default: '500'
+      batch_size:
+        description: 'Apps per OpenAI request'
+        required: false
+        default: '20'
+      dry_run:
+        description: 'Analyze only (do not update database)'
+        required: false
+        default: true
+        type: boolean
+      model:
+        description: 'OpenAI model'
+        required: false
+        default: 'gpt-5-nano'
+
+concurrency:
+  group: curated-apps-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  categorize-apps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Categorize apps with OpenAI
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ github.event.inputs.model || 'gpt-5-nano' }}
+          CATEGORIZE_MODE: ${{ github.event.inputs.mode || 'uncategorized' }}
+          CATEGORIZE_LIMIT: ${{ github.event.inputs.limit || '500' }}
+          CATEGORIZE_BATCH_SIZE: ${{ github.event.inputs.batch_size || '20' }}
+          CATEGORIZE_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: node .github/scripts/categorize-apps.js
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          if [ ! -f categorize-stats.json ]; then
+            echo "## Category Backfill" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No stats were produced. The job likely failed before categorization started." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          MODE=$(jq -r '.mode' categorize-stats.json)
+          MODEL=$(jq -r '.model' categorize-stats.json)
+          DRY_RUN=$(jq -r '.dryRun' categorize-stats.json)
+          LIMIT=$(jq -r '.limit' categorize-stats.json)
+          BATCH_SIZE=$(jq -r '.batchSize' categorize-stats.json)
+          PROCESSED=$(jq -r '.processed' categorize-stats.json)
+          UPDATED=$(jq -r '.updated' categorize-stats.json)
+          INPUT_TOKENS=$(jq -r '.usage.inputTokens' categorize-stats.json)
+          OUTPUT_TOKENS=$(jq -r '.usage.outputTokens' categorize-stats.json)
+          TOTAL_TOKENS=$(jq -r '.usage.totalTokens' categorize-stats.json)
+
+          echo "## Category Backfill Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Model:** $MODEL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Mode:** $MODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Dry run:** $DRY_RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Limit:** $LIMIT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Batch size:** $BATCH_SIZE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Processed:** $PROCESSED" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Updated:** $UPDATED" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Input tokens:** $INPUT_TOKENS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Output tokens:** $OUTPUT_TOKENS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Total tokens:** $TOTAL_TOKENS" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Top Assigned Categories" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.categoryCounts | to_entries | sort_by(-.value) | .[:12] | .[] | "- \(.key): \(.value)"' categorize-stats.json >> "$GITHUB_STEP_SUMMARY"
