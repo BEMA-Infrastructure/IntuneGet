@@ -49,7 +49,7 @@ export function Header() {
         {/* Animated background */}
         <motion.div
           className={cn(
-            "absolute inset-0 backdrop-blur-xl transition-all duration-500",
+            "absolute inset-0 backdrop-blur-xl transition-[background-color,border-radius] duration-500",
             hasScrolled
               ? "bg-white/75 rounded-2xl"
               : "bg-bg-deepest/80"
@@ -158,7 +158,7 @@ export function Header() {
       {/* Mobile menu */}
       <motion.div
         className={cn(
-          "md:hidden pointer-events-auto mx-auto mt-2 transition-all duration-500",
+          "md:hidden pointer-events-auto mx-auto mt-2 transition-[max-width] duration-500",
           hasScrolled
             ? "max-w-4xl px-0"
             : "max-w-full px-0",
