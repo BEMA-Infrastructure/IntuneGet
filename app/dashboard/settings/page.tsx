@@ -24,6 +24,7 @@ import { PageHeader } from '@/components/dashboard';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { WebhookManager } from '@/components/settings/WebhookManager';
 import { cn } from '@/lib/utils';
+import { useCartStore } from '@/stores/cart-store';
 
 type SettingsTab = 'general' | 'permissions' | 'notifications' | 'exports' | 'data';
 
@@ -59,6 +60,8 @@ export default function SettingsPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusState | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const autoOpenOnAdd = useCartStore((state) => state.autoOpenOnAdd);
+  const setAutoOpenOnAdd = useCartStore((state) => state.setAutoOpenOnAdd);
 
   const handleCheckPermissions = async () => {
     setIsChecking(true);
@@ -339,6 +342,25 @@ export default function SettingsPage() {
                           </a>
                         </div>
                       </div>
+                    </div>
+                  </motion.section>
+
+                  {/* Cart behavior card */}
+                  <motion.section
+                    variants={itemVariants}
+                    className="glass-light rounded-xl p-6 border border-black/5 hover:border-accent-cyan/20 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-text-primary font-medium">Cart behavior</p>
+                        <p className="text-sm text-text-muted">
+                          Control whether the cart opens automatically when adding apps
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={autoOpenOnAdd}
+                        onChange={setAutoOpenOnAdd}
+                      />
                     </div>
                   </motion.section>
                 </motion.div>

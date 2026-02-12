@@ -26,6 +26,19 @@ interface Release {
 
 const releases: Release[] = [
   {
+    version: "0.5.2",
+    date: "2026-02-12",
+    title: "Inventory Flow UX Improvement",
+    type: "patch",
+    highlights: [
+      "Add configurable cart auto-open preference in cart state with persisted user setting",
+      "Add Settings toggle to control whether the cart opens when adding a single app",
+      "Respect preference across all addItem paths while keeping addItemSilent behavior unchanged",
+      "Keep migration flow explicit by preserving existing openCart call after bulk add",
+      "Close Issue #31: inventory multi-select claim flow no longer forces cart to open",
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-02-01",
     title: "Unmanaged Apps, MSP Solution & Major Dashboard Overhaul",

@@ -13,11 +13,13 @@ import { DEFAULT_PSADT_CONFIG } from '@/types/psadt';
 interface CartState {
   items: CartItem[];
   isOpen: boolean;
+  autoOpenOnAdd: boolean;
 }
 
 interface CartActions {
   addItem: (item: Omit<CartItem, 'id' | 'addedAt'>) => void;
   addItemSilent: (item: Omit<CartItem, 'id' | 'addedAt'>) => void;
+  setAutoOpenOnAdd: (enabled: boolean) => void;
   removeItem: (id: string) => void;
   updateItem: (id: string, updates: Partial<CartItem>) => void;
   clearCart: () => void;
@@ -35,9 +37,11 @@ export const useCartStore = create<CartStore>()(
     (set, get) => ({
       items: [],
       isOpen: false,
+      autoOpenOnAdd: true,
 
       addItem: (item) => {
         const id = `${item.wingetId}-${item.version}-${item.architecture}-${Date.now()}`;
+        const shouldOpenCart = get().autoOpenOnAdd;
         set((state) => ({
           items: [
             ...state.items,
@@ -47,7 +51,7 @@ export const useCartStore = create<CartStore>()(
               addedAt: new Date().toISOString(),
             },
           ],
-          isOpen: true, // Auto-open cart when adding
+          isOpen: shouldOpenCart,
         }));
       },
 
@@ -70,6 +74,10 @@ export const useCartStore = create<CartStore>()(
         set((state) => ({
           items: state.items.filter((item) => item.id !== id),
         }));
+      },
+
+      setAutoOpenOnAdd: (enabled) => {
+        set({ autoOpenOnAdd: enabled });
       },
 
       updateItem: (id, updates) => {
@@ -111,7 +119,10 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: 'intuneget-cart',
-      partialize: (state) => ({ items: state.items }), // Only persist items
+      partialize: (state) => ({
+        items: state.items,
+        autoOpenOnAdd: state.autoOpenOnAdd,
+      }),
     }
   )
 );

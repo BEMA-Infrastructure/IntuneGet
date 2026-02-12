@@ -25,7 +25,7 @@ const softwareApplicationJsonLd = {
   operatingSystem: "Web",
   url: "https://intuneget.com",
   downloadUrl: "https://github.com/ugurkocde/IntuneGet",
-  softwareVersion: "0.5.0",
+  softwareVersion: "0.5.2",
   datePublished: "2024-01-01",
   description:
     "IntuneGet is the leading free, open-source tool for deploying 10,000+ Winget applications to Microsoft Intune. No scripting required, 5-minute setup, and trusted by IT teams worldwide.",
