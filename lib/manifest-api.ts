@@ -260,26 +260,25 @@ async function getManifestFromSupabase(
       return null;
     }
 
-    // Parse installers from JSONB or build from individual fields
+    // Parse installers from JSONB, recover malformed stringified JSON, or fetch fresh installer manifest
     let installers: WingetInstaller[] = [];
 
-    if (versionData.installers && Array.isArray(versionData.installers) && versionData.installers.length > 0) {
-      // Use pre-parsed installers array
-      installers = (versionData.installers as Array<Record<string, unknown>>).map((inst) => ({
-        Architecture: (inst.Architecture as WingetInstaller['Architecture']) || 'x64',
-        InstallerUrl: (inst.InstallerUrl as string) || '',
-        InstallerSha256: (inst.InstallerSha256 as string) || '',
-        InstallerType: normalizeInstallerType(inst.InstallerType as string),
-        Scope: inst.Scope as WingetInstaller['Scope'],
-        InstallerSwitches: inst.InstallerSwitches as WingetInstaller['InstallerSwitches'],
-        ProductCode: inst.ProductCode as string,
-        PackageFamilyName: inst.PackageFamilyName as string,
-        UpgradeBehavior: inst.UpgradeBehavior as WingetInstaller['UpgradeBehavior'],
-      }));
-    } else if (versionData.installer_url) {
-      // Build single installer from individual fields
+    const parsedInstallers = coerceInstallersArray(versionData.installers);
+
+    if (parsedInstallers.length > 0) {
+      installers = parsedInstallers;
+    } else {
+      // If DB row is incomplete or legacy, fetch authoritative installer manifest for this version.
+      const installerManifest = await fetchInstallerManifest(wingetId, versionData.version);
+      if (installerManifest) {
+        installers = normalizeInstallers(installerManifest);
+      }
+    }
+
+    if (installers.length === 0 && versionData.installer_url) {
+      // Last-resort legacy fallback: preserve row usability even if GitHub fetch fails.
       installers = [{
-        Architecture: 'x64',
+        Architecture: inferArchitectureFromInstallerUrl(versionData.installer_url),
         InstallerUrl: versionData.installer_url,
         InstallerSha256: versionData.installer_sha256 || '',
         InstallerType: normalizeInstallerType(versionData.installer_type),
@@ -309,6 +308,50 @@ async function getManifestFromSupabase(
     console.error(`Failed to get manifest from Supabase for ${wingetId}:`, error);
     return null;
   }
+}
+
+function coerceInstallersArray(rawInstallers: unknown): WingetInstaller[] {
+  let installerArray: Array<Record<string, unknown>> = [];
+
+  if (Array.isArray(rawInstallers)) {
+    installerArray = rawInstallers as Array<Record<string, unknown>>;
+  } else if (typeof rawInstallers === 'string' && rawInstallers.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(rawInstallers);
+      if (Array.isArray(parsed)) {
+        installerArray = parsed as Array<Record<string, unknown>>;
+      }
+    } catch {
+      installerArray = [];
+    }
+  }
+
+  if (installerArray.length === 0) {
+    return [];
+  }
+
+  return installerArray.map((inst) => ({
+    Architecture: (inst.Architecture as WingetInstaller['Architecture']) || 'x64',
+    InstallerUrl: (inst.InstallerUrl as string) || '',
+    InstallerSha256: (inst.InstallerSha256 as string) || '',
+    InstallerType: normalizeInstallerType(inst.InstallerType as string),
+    Scope: inst.Scope as WingetInstaller['Scope'],
+    InstallerSwitches: inst.InstallerSwitches as WingetInstaller['InstallerSwitches'],
+    ProductCode: inst.ProductCode as string,
+    PackageFamilyName: inst.PackageFamilyName as string,
+    UpgradeBehavior: inst.UpgradeBehavior as WingetInstaller['UpgradeBehavior'],
+  }));
+}
+
+function inferArchitectureFromInstallerUrl(installerUrl: string): WingetInstaller['Architecture'] {
+  const value = installerUrl.toLowerCase();
+
+  if (value.includes('arm64')) return 'arm64';
+  if (value.includes('arm')) return 'arm';
+  if (value.includes('x86') || value.includes('win32') || value.includes('32-bit')) return 'x86';
+  if (value.includes('neutral')) return 'neutral';
+
+  return 'x64';
 }
 
 /**

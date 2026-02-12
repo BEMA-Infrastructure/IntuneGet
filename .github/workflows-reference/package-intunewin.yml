@@ -347,13 +347,32 @@ jobs:
             }
           }
 
-          $mappedArchitecture = switch (($env:ARCHITECTURE ?? '').ToLowerInvariant()) {
-            'x64' { 'x64' }
-            'x86' { 'x86' }
-            'arm64' { 'arm64' }
-            'arm' { 'arm' }
-            'neutral' { 'neutral' }
-            default { 'x64' }
+          $inputArchitecture = ($env:ARCHITECTURE ?? '').ToLowerInvariant()
+          $mappedApplicableArchitecture = 'x64'
+          $mappedAllowedArchitecture = $null
+
+          switch ($inputArchitecture) {
+            'x86' { $mappedApplicableArchitecture = 'x86' }
+            'x64' { $mappedApplicableArchitecture = 'x64' }
+            'arm64' {
+              # Use modern field for ARM64 targeting; Graph sets applicableArchitectures to none.
+              $mappedApplicableArchitecture = 'none'
+              $mappedAllowedArchitecture = 'arm64'
+            }
+            'arm' {
+              Write-Host "Architecture 'arm' is not supported for Intune Win32 app targeting; using 'x64'"
+              $mappedApplicableArchitecture = 'x64'
+            }
+            'neutral' {
+              Write-Host "Architecture 'neutral' is not supported for Intune Win32 app targeting; using 'x64'"
+              $mappedApplicableArchitecture = 'x64'
+            }
+            default {
+              if ($inputArchitecture) {
+                Write-Host "Architecture '$inputArchitecture' is not recognized; using 'x64'"
+              }
+              $mappedApplicableArchitecture = 'x64'
+            }
           }
 
           # Parse and convert detection rules to Graph API format
@@ -510,7 +529,7 @@ jobs:
           }
 
           # 1. Create the Win32 app in Intune
-          $appBody = @{
+          $appBodyHash = @{
             "@odata.type" = "#microsoft.graph.win32LobApp"
             displayName = $env:DISPLAY_NAME
             publisher = $env:PUBLISHER
@@ -519,7 +538,7 @@ jobs:
             fileName = "$env:PACKAGE_FILENAME"
             installCommandLine = "Invoke-AppDeployToolkit.exe"
             uninstallCommandLine = "Invoke-AppDeployToolkit.exe -DeploymentType Uninstall"
-            applicableArchitectures = $mappedArchitecture
+            applicableArchitectures = $mappedApplicableArchitecture
             installExperience = @{
               runAsAccount = if ($env:INSTALL_SCOPE -eq "user") { "user" } else { "system" }
               deviceRestartBehavior = $restartBehavior
@@ -536,7 +555,13 @@ jobs:
             msiInformation = $null
             setupFilePath = "Invoke-AppDeployToolkit.exe"
             minimumSupportedWindowsRelease = "1903"
-          } | ConvertTo-Json -Depth 10
+          }
+
+          if ($mappedAllowedArchitecture) {
+            $appBodyHash.allowedArchitectures = $mappedAllowedArchitecture
+          }
+
+          $appBody = $appBodyHash | ConvertTo-Json -Depth 10
 
           $app = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/deviceAppManagement/mobileApps" -Method POST -Headers $headers -Body $appBody
           $appId = $app.id

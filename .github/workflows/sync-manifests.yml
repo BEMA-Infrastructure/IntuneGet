@@ -343,7 +343,7 @@ jobs:
                                  installerManifest.InstallerSwitches?.Silent ||
                                  defaultInstaller.InstallerSwitches?.SilentWithProgress ||
                                  installerManifest.InstallerSwitches?.SilentWithProgress || null,
-                    installers: JSON.stringify(installers),
+                    installers,
                     minimum_os_version: installerManifest.MinimumOSVersion || null,
                     platform: installerManifest.Platform || null,
                     upgrade_behavior: installerManifest.UpgradeBehavior || null,
