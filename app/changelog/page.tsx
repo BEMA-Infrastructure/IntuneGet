@@ -26,6 +26,18 @@ interface Release {
 
 const releases: Release[] = [
   {
+    version: "0.5.6",
+    date: "2026-02-12",
+    title: "Intune Metadata and Workflow Payload Improvements",
+    type: "patch",
+    highlights: [
+      "Propagate package descriptions from Supabase catalog entries into GitHub Actions upload payloads",
+      "Set Intune Win32 app description from provided package metadata with safe fallback for legacy installs",
+      "Preserve existing displayVersion behavior in workflow app creation payloads",
+      "Close issues for architecture and catalog description handling in GitHub Actions deployment path",
+    ],
+  },
+  {
     version: "0.5.4",
     date: "2026-02-12",
     title: "GitHub Actions Architecture Fix",
