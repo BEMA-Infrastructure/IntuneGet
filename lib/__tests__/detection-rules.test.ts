@@ -393,6 +393,32 @@ describe('generateInstallCommand', () => {
     expect(command).toContain('/S');
   });
 
+  it('should append .exe for extensionless EXE URLs', () => {
+    const installer: NormalizedInstaller = {
+      architecture: 'x64',
+      url: 'https://dl.pstmn.io/download/version/11.82.1/windows_64',
+      sha256: 'abc123',
+      type: 'exe',
+    };
+
+    const command = generateInstallCommand(installer);
+
+    expect(command).toContain('"windows_64.exe"');
+  });
+
+  it('should append .msi for extensionless MSI URLs', () => {
+    const installer: NormalizedInstaller = {
+      architecture: 'x64',
+      url: 'https://example.com/releases/installer',
+      sha256: 'abc123',
+      type: 'msi',
+    };
+
+    const command = generateInstallCommand(installer);
+
+    expect(command).toContain('msiexec /i "installer.msi"');
+  });
+
   it('should generate zip extraction command', () => {
     const installer: NormalizedInstaller = {
       architecture: 'x64',

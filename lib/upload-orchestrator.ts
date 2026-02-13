@@ -5,6 +5,7 @@
 
 import type { CartItem, StagedPackage, UploadJob, PackagingJob } from '@/types/upload';
 import type { DetectionRule } from '@/types/intune';
+import { resolveInstallerFileName } from '@/lib/installer-filename';
 import {
   createWin32App,
   createContentVersion,
@@ -38,6 +39,10 @@ export async function deployToIntune(
   onProgress?: ProgressCallback
 ): Promise<DeploymentResult> {
   const jobId = stagedPackage.id;
+  const installerFileName = resolveInstallerFileName(
+    stagedPackage.installerUrl,
+    stagedPackage.installerType
+  );
 
   try {
     // Step 1: Create the Win32 app in Intune
@@ -47,7 +52,7 @@ export async function deployToIntune(
       displayName: stagedPackage.displayName,
       description: `Deployed via IntuneGet from Winget: ${stagedPackage.wingetId}`,
       publisher: stagedPackage.publisher,
-      fileName: getInstallerFileName(stagedPackage.installerUrl),
+      fileName: installerFileName,
       installCommandLine: stagedPackage.installCommand,
       uninstallCommandLine: stagedPackage.uninstallCommand,
       applicableArchitectures: mapArchitecture(stagedPackage.architecture),
@@ -90,7 +95,7 @@ export async function deployToIntune(
       accessToken,
       appId,
       contentVersionId,
-      getInstallerFileName(stagedPackage.installerUrl),
+      installerFileName,
       fileSize,
       encryptedFileSize
     );
@@ -232,15 +237,6 @@ export function cartItemToStagedPackage(
 }
 
 // Helper functions
-
-function getInstallerFileName(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.pathname.split('/').pop() || 'installer.exe';
-  } catch {
-    return 'installer.exe';
-  }
-}
 
 function mapArchitecture(arch: string): 'x64' | 'x86' | 'arm64' | 'arm' | 'neutral' {
   const mapping: Record<string, 'x64' | 'x86' | 'arm64' | 'arm' | 'neutral'> = {

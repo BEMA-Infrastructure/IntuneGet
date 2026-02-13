@@ -26,6 +26,19 @@ interface Release {
 
 const releases: Release[] = [
   {
+    version: "0.5.8",
+    date: "2026-02-13",
+    title: "Installer Filename Normalization for Workflow Packaging",
+    type: "patch",
+    highlights: [
+      "Normalize installer filenames in GitHub Actions packaging to prevent extensionless executable paths",
+      "Append deterministic extensions for extensionless installer URLs based on installer type (for example Postman windows_64 -> windows_64.exe)",
+      "Add workflow resolver self-validation cases for EXE, MSI, SourceForge download paths, and ZIP artifacts",
+      "Align app-side install command and upload metadata filename resolution with shared helper and test coverage",
+      "Fix Issue #8: postman.postman fails to install due to extensionless installer filename",
+    ],
+  },
+  {
     version: "0.5.6",
     date: "2026-02-12",
     title: "Intune Metadata and Workflow Payload Improvements",

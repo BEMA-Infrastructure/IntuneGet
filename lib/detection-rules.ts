@@ -14,6 +14,7 @@ import type {
   ScriptDetectionRule,
 } from '@/types/intune';
 import type { NormalizedInstaller, WingetInstallerType, WingetScope } from '@/types/winget';
+import { resolveInstallerFileName } from '@/lib/installer-filename';
 
 /**
  * Generate detection rules based on installer metadata
@@ -253,7 +254,7 @@ export function generateInstallCommand(
   installer: NormalizedInstaller,
   scope: WingetScope = 'machine'
 ): string {
-  const installerName = getInstallerFileName(installer.url);
+  const installerName = resolveInstallerFileName(installer.url, installer.type);
   const silentArgs = installer.silentArgs || getDefaultSilentArgs(installer.type);
 
   switch (installer.type) {
@@ -370,19 +371,6 @@ function generateRegistryUninstallCommand(
   // Return the display name as a marker - the actual uninstall script
   // is generated in the PSADT workflow with full PowerShell logic
   return `REGISTRY_UNINSTALL:${displayName}:${silentSwitch}`;
-}
-
-/**
- * Get installer filename from URL
- */
-function getInstallerFileName(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    return pathname.split('/').pop() || 'installer.exe';
-  } catch {
-    return 'installer.exe';
-  }
 }
 
 /**
