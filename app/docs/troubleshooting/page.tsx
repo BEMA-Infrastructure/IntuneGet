@@ -85,6 +85,11 @@ const faqs = [
     answer:
       "IntuneGet supports email notifications (real-time, daily digest, or critical-only) and webhooks for Slack, Microsoft Teams, Discord, or custom HTTP endpoints. Webhooks are signed with HMAC for security. Configure both in the Settings page under the Notifications tab.",
   },
+  {
+    question: "What is the Update Only assignment intent?",
+    answer:
+      'Update Only assigns an app as "required" in Intune but adds a requirement rule that checks whether the app is already installed on the device. If the app exists but is outdated, Intune updates it. If the app is not present, the device is skipped entirely. This is ideal for discovered/unmanaged apps where you want to update existing installations without force-installing the app on every targeted device. Note that requirement rules are app-level in Intune: mixing Update Only with other intents on the same app will gate all assignments behind the existence check.',
+  },
 ];
 
 export default function TroubleshootingPage() {
@@ -327,6 +332,70 @@ export default function TroubleshootingPage() {
                 <li>Check the webhook delivery logs in Settings &gt; Notifications</li>
                 <li>Ensure the endpoint accepts POST requests with JSON payloads</li>
                 <li>For Slack/Teams/Discord, verify the incoming webhook URL has not been revoked</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        {/* Assignment Errors */}
+        <h3 className="text-lg font-semibold text-text-primary mb-4 mt-8">
+          Assignment Errors
+        </h3>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border border-status-error/20 bg-status-error/5 p-4">
+            <h4 className="font-medium text-text-primary mb-2 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-status-error" />
+              Update Only app is installing on devices that do not have it
+            </h4>
+            <p className="text-sm text-text-secondary mb-3">
+              The app is being installed on all targeted devices instead of only
+              those with an existing installation.
+            </p>
+            <div className="rounded bg-bg-elevated p-3">
+              <p className="text-xs font-semibold text-text-secondary mb-2">Solution:</p>
+              <ol className="list-decimal list-inside text-xs text-text-secondary space-y-1">
+                <li>
+                  Verify the assignment was configured with the &quot;Update
+                  Only&quot; intent before deployment -- check in your cart
+                  configuration
+                </li>
+                <li>
+                  Open the app in the Intune portal and confirm a requirement
+                  rule is present (registry check or PowerShell script)
+                </li>
+                <li>
+                  If the requirement rule is missing, the app may have been
+                  deployed with a different intent and later changed -- redeploy
+                  with Update Only selected
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-status-error/20 bg-status-error/5 p-4">
+            <h4 className="font-medium text-text-primary mb-2 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-status-error" />
+              Warning about mixed intents when using Update Only
+            </h4>
+            <p className="text-sm text-text-secondary mb-3">
+              A warning banner appears when combining Update Only with Required
+              or Available intents on the same app.
+            </p>
+            <div className="rounded bg-bg-elevated p-3">
+              <p className="text-xs font-semibold text-text-secondary mb-2">Explanation:</p>
+              <ol className="list-decimal list-inside text-xs text-text-secondary space-y-1">
+                <li>
+                  Intune requirement rules are app-level, not per-assignment
+                </li>
+                <li>
+                  An Update Only requirement rule will gate all assignments
+                  (including Required or Available) behind the existence check
+                </li>
+                <li>
+                  To avoid this, use Update Only for all assignments on an app
+                  or none -- do not mix intents on the same app
+                </li>
               </ol>
             </div>
           </div>

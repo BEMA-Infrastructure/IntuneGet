@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -125,6 +126,61 @@ export default function UpdatesPoliciesPage() {
           <p>
             Update logic applies failure thresholds, cooldown windows, and rate
             caps to reduce deployment risk.
+          </p>
+        </Callout>
+      </section>
+
+      <section>
+        <h2 className="text-2xl font-semibold text-text-primary mb-4">
+          Assignment Intents
+        </h2>
+        <p className="text-text-secondary mb-4">
+          When deploying an app (or triggering an update), IntuneGet supports
+          four assignment intents that control how Intune installs the package:
+        </p>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeader>Intent</TableHeader>
+              <TableHeader>Behavior</TableHeader>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell><code>Required</code></TableCell>
+              <TableCell className="text-sm text-text-secondary">Automatically installs the app on all targeted devices</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><code>Available</code></TableCell>
+              <TableCell className="text-sm text-text-secondary">Makes the app available in Company Portal for users to install on demand</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><code>Uninstall</code></TableCell>
+              <TableCell className="text-sm text-text-secondary">Removes the app from targeted devices</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><code>Update Only</code></TableCell>
+              <TableCell className="text-sm text-text-secondary">
+                Assigns as required but adds a requirement rule so that only
+                devices where the app is already installed receive the update
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+
+        <Callout type="info" title="Update Only for Discovered Apps">
+          <p>
+            The Update Only intent is especially useful for{" "}
+            <Link
+              href="/docs/unmanaged-apps"
+              className="text-accent-cyan hover:underline"
+            >
+              discovered/unmanaged apps
+            </Link>
+            . It updates existing installations without force-installing the app
+            on devices that do not already have it. See the Unmanaged Apps
+            documentation for full details on how requirement rules are
+            generated and the app-level caveat when mixing intents.
           </p>
         </Callout>
       </section>

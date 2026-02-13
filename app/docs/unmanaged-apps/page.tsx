@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, SearchX, CheckCircle, AlertCircle, HelpCircle, Shield } from "lucide-react";
+import { ArrowRight, SearchX, CheckCircle, AlertCircle, HelpCircle, Shield, RefreshCw } from "lucide-react";
 import {
   Callout,
   Table,
@@ -314,6 +314,142 @@ export default function UnmanagedAppsPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      {/* Update Only Assignments */}
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <RefreshCw className="h-5 w-5 text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-semibold text-text-primary">
+            Update Only Assignments
+          </h2>
+        </div>
+        <p className="text-text-secondary mb-4">
+          When deploying claimed apps, you can assign them with an &quot;Update
+          Only&quot; intent. This is particularly useful for discovered apps: instead
+          of force-installing the app on every targeted device, it only updates
+          devices where the app is already present.
+        </p>
+
+        <h3 className="text-lg font-semibold text-text-primary mb-3">
+          How It Works
+        </h3>
+        <p className="text-text-secondary mb-4">
+          Selecting &quot;Update Only&quot; tells IntuneGet to assign the app as
+          &quot;required&quot; in Intune but with an additional{" "}
+          <strong>requirement rule</strong> that checks whether the app already
+          exists on the device. Intune then evaluates two conditions:
+        </p>
+        <ol className="list-decimal list-inside space-y-2 text-text-secondary mb-6">
+          <li>
+            <strong>Requirement met</strong> (app exists on the device) AND{" "}
+            <strong>detection not met</strong> (new version not yet installed) --
+            Intune proceeds with the update
+          </li>
+          <li>
+            <strong>Requirement not met</strong> (app not on the device) -- Intune
+            skips the device entirely
+          </li>
+          <li>
+            <strong>Requirement met AND detection met</strong> (app exists and is
+            already up to date) -- device reports as compliant
+          </li>
+        </ol>
+
+        <h3 className="text-lg font-semibold text-text-primary mb-3">
+          Intune Evaluation Matrix
+        </h3>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeader>App Already Installed?</TableHeader>
+              <TableHeader>New Version Installed?</TableHeader>
+              <TableHeader>Result</TableHeader>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell className="text-text-secondary">No</TableCell>
+              <TableCell className="text-text-secondary">No</TableCell>
+              <TableCell>
+                <span className="text-text-muted">Skipped -- requirement not met</span>
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-text-secondary">Yes</TableCell>
+              <TableCell className="text-text-secondary">No</TableCell>
+              <TableCell>
+                <span className="text-status-success">Updated -- requirement met, detection not met</span>
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-text-secondary">Yes</TableCell>
+              <TableCell className="text-text-secondary">Yes</TableCell>
+              <TableCell>
+                <span className="text-accent-cyan">Compliant -- already up to date</span>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+
+        <h3 className="text-lg font-semibold text-text-primary mt-6 mb-3">
+          Configuring Update Only
+        </h3>
+        <ol className="list-decimal list-inside space-y-2 text-text-secondary mb-6">
+          <li>Claim an unmanaged app (or add any app to your cart)</li>
+          <li>Open the app configuration and expand &quot;Assignment Configuration&quot;</li>
+          <li>Enable assignments and add a target (All Devices, All Users, or an Entra ID group)</li>
+          <li>
+            Select <strong>Update Only</strong> from the intent dropdown -- the
+            badge turns amber
+          </li>
+          <li>An info banner explains the behavior</li>
+          <li>Save and deploy -- requirement rules are generated automatically</li>
+        </ol>
+
+        <h3 className="text-lg font-semibold text-text-primary mb-3">
+          How Detection Works
+        </h3>
+        <p className="text-text-secondary mb-4">
+          The requirement rule detects the app using standard Windows uninstall
+          registry methods, not the IntuneGet registry marker. This means it
+          works for apps that were installed outside of IntuneGet (which is
+          exactly the case for discovered/unmanaged apps):
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-text-secondary mb-6">
+          <li>
+            <strong>MSI apps with product codes:</strong> A registry requirement
+            rule checks the product code&apos;s uninstall key directly
+          </li>
+          <li>
+            <strong>All other apps:</strong> A PowerShell script searches both
+            HKLM and HKCU uninstall registry paths by display name
+          </li>
+        </ul>
+
+        <Callout type="warning" title="Requirement Rules Are App-Level">
+          <p>
+            Intune requirement rules apply to the entire app, not to individual
+            assignments. If you mix &quot;Update Only&quot; with other intents
+            (such as Required or Available) on the same app, the existence check
+            will gate <strong>all</strong> assignments -- meaning even the
+            Required assignments will only install on devices where the app
+            already exists. A warning banner appears in the UI when this
+            situation is detected.
+          </p>
+        </Callout>
+
+        <Callout type="info" title="How It Appears in Intune">
+          <p>
+            The Intune portal will show the assignment as &quot;Required&quot;
+            because &quot;Update Only&quot; is an IntuneGet concept -- there is
+            no native &quot;update only&quot; intent in Intune. The additional
+            requirement rule is what limits the installation to devices that
+            already have the app.
+          </p>
+        </Callout>
       </section>
 
       {/* Next Steps */}

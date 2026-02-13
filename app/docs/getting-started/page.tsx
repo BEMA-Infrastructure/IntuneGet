@@ -486,6 +486,15 @@ nssm start IntuneGetPackager`}
           </li>
           <li className="flex items-start gap-2">
             <span className="text-accent-cyan">-</span>
+            Configure{" "}
+            <Link href="/docs/unmanaged-apps" className="text-accent-cyan hover:underline">
+              assignment intents
+            </Link>{" "}
+            (Required, Available, Uninstall, or Update Only) when adding apps
+            to your cart
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-accent-cyan">-</span>
             Set up a git remote to pull updates from the upstream repository
           </li>
           <li className="flex items-start gap-2">

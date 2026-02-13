@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -44,9 +45,26 @@ export default function InventoryReportsUploadsPage() {
         <ul className="list-disc list-inside space-y-2 text-text-secondary">
           <li>Route: <code>/dashboard/inventory</code></li>
           <li>Search, sort, and grid/list view for Intune Win32 apps</li>
-          <li>App details panel includes assignment information</li>
+          <li>App details panel includes assignment information and intent types (Required, Available, Uninstall)</li>
           <li>Endpoints: <code>GET /api/intune/apps</code>, <code>GET /api/intune/apps/[id]</code></li>
         </ul>
+        <Callout type="info" title="Assignment Intents">
+          <p>
+            When configuring app assignments before deployment, IntuneGet
+            supports four intents: <strong>Required</strong>,{" "}
+            <strong>Available</strong>, <strong>Uninstall</strong>, and{" "}
+            <strong>Update Only</strong>. The Update Only intent assigns the app
+            as required but adds a requirement rule so that only devices where
+            the app is already installed receive the update. See the{" "}
+            <Link
+              href="/docs/unmanaged-apps#update-only-assignments"
+              className="text-accent-cyan hover:underline"
+            >
+              Unmanaged Apps documentation
+            </Link>{" "}
+            for details.
+          </p>
+        </Callout>
       </section>
 
       <section>
