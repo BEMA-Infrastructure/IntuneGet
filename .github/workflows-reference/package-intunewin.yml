@@ -26,6 +26,7 @@ jobs:
       UNINSTALL_COMMAND: ${{ github.event.client_payload.installer.uninstallCommand }}
       PSADT_CONFIG: ${{ github.event.client_payload.config.psadtConfig }}
       DETECTION_RULES: ${{ github.event.client_payload.config.detectionRules }}
+      REQUIREMENT_RULES: ${{ github.event.client_payload.config.requirementRules }}
       ASSIGNMENTS: ${{ github.event.client_payload.config.assignments }}
       INSTALL_SCOPE: ${{ github.event.client_payload.config.installScope }}
       FORCE_CREATE: ${{ github.event.client_payload.config.forceCreate }}
@@ -511,6 +512,20 @@ jobs:
             )
           }
 
+          # Parse and merge requirement rules (already in Graph API format with ruleType: 'requirement')
+          $requirementRulesJson = $env:REQUIREMENT_RULES
+          if ($requirementRulesJson -and $requirementRulesJson -ne '[]') {
+            try {
+              $reqRules = $requirementRulesJson | ConvertFrom-Json -AsHashtable
+              foreach ($reqRule in $reqRules) {
+                $graphRules += $reqRule
+              }
+              Write-Host "Added $($reqRules.Count) requirement rule(s) for Update Only mode"
+            } catch {
+              Write-Host "Warning: Could not parse requirement rules: $_"
+            }
+          }
+
           Write-Host "Detection rules configured: $($graphRules.Count) rule(s)"
 
           # Load app icon if available
@@ -745,9 +760,12 @@ jobs:
               }
             }
 
+            # Map 'updateOnly' to 'required' for Graph API (requirement rules handle the gating)
+            $graphIntent = if ($assignment.intent -eq 'updateOnly') { 'required' } else { $assignment.intent }
+
             $graphAssignments += @{
               '@odata.type' = '#microsoft.graph.mobileAppAssignment'
-              intent = $assignment.intent
+              intent = $graphIntent
               target = $target
               settings = @{
                 '@odata.type' = '#microsoft.graph.win32LobAppAssignmentSettings'

@@ -131,11 +131,41 @@ export type DetectionOperator =
   | 'lessThan'
   | 'lessThanOrEqual';
 
-// Requirement rules
-export interface RequirementRule {
-  '@odata.type': string;
-  operator?: DetectionOperator;
-  detectionValue?: string;
+// Requirement rules (Graph API rules array format with ruleType: 'requirement')
+export type RequirementRule =
+  | FileRequirementRule
+  | RegistryRequirementRule
+  | ScriptRequirementRule;
+
+export interface FileRequirementRule {
+  '@odata.type': '#microsoft.graph.win32LobAppFileSystemRule';
+  ruleType: 'requirement';
+  path: string;
+  fileOrFolderName: string;
+  check32BitOn64System?: boolean;
+  operationType: 'exists' | 'notExists';
+}
+
+export interface RegistryRequirementRule {
+  '@odata.type': '#microsoft.graph.win32LobAppRegistryRule';
+  ruleType: 'requirement';
+  keyPath: string;
+  valueName?: string;
+  check32BitOn64System?: boolean;
+  operationType: 'exists';
+}
+
+export interface ScriptRequirementRule {
+  '@odata.type': '#microsoft.graph.win32LobAppPowerShellScriptRule';
+  ruleType: 'requirement';
+  displayName: string;
+  scriptContent: string; // base64-encoded
+  enforceSignatureCheck: boolean;
+  runAs32Bit: boolean;
+  runAsAccount: 'system' | 'user';
+  operationType: 'boolean';
+  operator: 'equal';
+  comparisonValue: 'True';
 }
 
 // Win32 LOB App Rule

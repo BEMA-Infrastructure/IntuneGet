@@ -145,7 +145,7 @@ export function AssignmentConfig({ assignments, onChange }: AssignmentConfigProp
   };
 
   // Update assignment intent
-  const updateIntent = (index: number, intent: 'required' | 'available' | 'uninstall') => {
+  const updateIntent = (index: number, intent: 'required' | 'available' | 'uninstall' | 'updateOnly') => {
     const updated = [...assignments];
     updated[index] = { ...updated[index], intent };
     onChange(updated);
@@ -179,6 +179,8 @@ export function AssignmentConfig({ assignments, onChange }: AssignmentConfigProp
         return 'text-green-400 bg-green-500/10 border-green-500/30';
       case 'uninstall':
         return 'text-red-400 bg-red-500/10 border-red-500/30';
+      case 'updateOnly':
+        return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
       default:
         return 'text-text-muted bg-slate-500/10 border-slate-500/30';
     }
@@ -361,7 +363,7 @@ export function AssignmentConfig({ assignments, onChange }: AssignmentConfigProp
                       <select
                         value={assignment.intent}
                         onChange={(e) =>
-                          updateIntent(index, e.target.value as 'required' | 'available' | 'uninstall')
+                          updateIntent(index, e.target.value as 'required' | 'available' | 'uninstall' | 'updateOnly')
                         }
                         className={cn(
                           'appearance-none pl-3 pr-8 py-1.5 rounded border text-xs font-medium cursor-pointer focus:outline-none',
@@ -376,6 +378,9 @@ export function AssignmentConfig({ assignments, onChange }: AssignmentConfigProp
                         </option>
                         <option value="uninstall" className="bg-bg-elevated text-text-primary">
                           Uninstall
+                        </option>
+                        <option value="updateOnly" className="bg-bg-elevated text-text-primary">
+                          Update Only
                         </option>
                       </select>
                       <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" />
@@ -392,6 +397,26 @@ export function AssignmentConfig({ assignments, onChange }: AssignmentConfigProp
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Update Only Info Banner */}
+          {assignments.some((a) => a.intent === 'updateOnly') && (
+            <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 space-y-2">
+              <p className="text-amber-400 text-sm">
+                <span className="font-medium">Update Only:</span>{' '}
+                The app will only install on devices where it is already detected.
+                Devices without the app will be skipped.
+              </p>
+              {assignments.some((a) => a.intent !== 'updateOnly') && (
+                <p className="text-amber-400 text-sm">
+                  <span className="font-medium">Warning:</span>{' '}
+                  Requirement rules apply to the entire app, not individual assignments.
+                  Mixing &quot;Update Only&quot; with other intents will gate all assignments
+                  behind the existence check. Consider using &quot;Update Only&quot; for all
+                  assignments or none.
+                </p>
+              )}
             </div>
           )}
 

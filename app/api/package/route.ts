@@ -265,6 +265,7 @@ export async function POST(request: NextRequest) {
           callbackUrl,
           psadtConfig: item.psadtConfig ? JSON.stringify(item.psadtConfig) : undefined,
           detectionRules: item.detectionRules ? JSON.stringify(item.detectionRules) : undefined,
+          requirementRules: item.requirementRules ? JSON.stringify(item.requirementRules) : undefined,
           assignments: item.assignments ? JSON.stringify(item.assignments) : undefined,
           categories: item.categories ? JSON.stringify(item.categories) : undefined,
           installScope: item.installScope,

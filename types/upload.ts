@@ -3,7 +3,7 @@
  * For package staging, job tracking, and deployment workflow
  */
 
-import type { DetectionRule } from './intune';
+import type { DetectionRule, RequirementRule } from './intune';
 import type { WingetArchitecture, WingetScope, WingetInstallerType } from './winget';
 import type { PSADTConfig } from './psadt';
 
@@ -31,6 +31,9 @@ export interface StagedPackage {
 
   // Detection
   detectionRules: DetectionRule[];
+
+  // Requirement rules (for "Update Only" - check app existence before install)
+  requirementRules?: RequirementRule[];
 
   // Status
   status: StagedPackageStatus;
@@ -85,13 +88,13 @@ export type UploadJobStatus =
 export interface GroupAssignment {
   groupId: string;
   groupName: string;
-  intent: 'required' | 'available' | 'uninstall';
+  intent: 'required' | 'available' | 'uninstall' | 'updateOnly';
 }
 
 // Flexible assignment target for package configuration
 export interface PackageAssignment {
   type: 'allUsers' | 'allDevices' | 'group';
-  intent: 'required' | 'available' | 'uninstall';
+  intent: 'required' | 'available' | 'uninstall' | 'updateOnly';
   groupId?: string;      // Only for type 'group'
   groupName?: string;    // Display name for UI
 }
@@ -135,6 +138,9 @@ export interface CartItem {
   installCommand: string;
   uninstallCommand: string;
   detectionRules: DetectionRule[];
+
+  // Requirement rules (for "Update Only" - check app existence before install)
+  requirementRules?: RequirementRule[];
 
   // PSADT Configuration
   psadtConfig: PSADTConfig;

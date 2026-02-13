@@ -136,9 +136,9 @@ export async function deployToIntune(
     onProgress?.(jobId, 'configuring', 85, 'Finalizing app configuration...');
     await updateAppWithContent(accessToken, appId, contentVersionId);
 
-    // Step 8: Set detection rules
+    // Step 8: Set detection rules (and requirement rules if present)
     onProgress?.(jobId, 'configuring', 90, 'Configuring detection rules...');
-    await setDetectionRules(accessToken, appId, stagedPackage.detectionRules);
+    await setDetectionRules(accessToken, appId, stagedPackage.detectionRules, stagedPackage.requirementRules);
 
     // Step 9: Complete
     onProgress?.(jobId, 'completed', 100, 'Deployment complete!');
@@ -232,6 +232,7 @@ export function cartItemToStagedPackage(
     installCommand: item.installCommand,
     uninstallCommand: item.uninstallCommand,
     detectionRules: item.detectionRules,
+    requirementRules: item.requirementRules,
     status: 'pending',
   };
 }

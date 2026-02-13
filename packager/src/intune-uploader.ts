@@ -27,7 +27,8 @@ export interface EncryptionInfo {
 
 type ProgressCallback = (percent: number, message: string) => Promise<void>;
 
-type AssignmentIntent = 'required' | 'available' | 'uninstall';
+type AssignmentIntent = 'required' | 'available' | 'uninstall' | 'updateOnly';
+type GraphAssignmentIntent = 'required' | 'available' | 'uninstall';
 
 interface PackageAssignment {
   type: 'allUsers' | 'allDevices' | 'group';
@@ -54,7 +55,7 @@ interface GraphAssignmentTarget {
 
 interface GraphMobileAppAssignment {
   '@odata.type': '#microsoft.graph.mobileAppAssignment';
-  intent: AssignmentIntent;
+  intent: GraphAssignmentIntent;
   target: GraphAssignmentTarget;
   settings: {
     '@odata.type': '#microsoft.graph.win32LobAppAssignmentSettings';
@@ -220,8 +221,7 @@ export class IntuneUploader {
         { returnCode: 1641, type: 'hardReboot' },
         { returnCode: 1618, type: 'retry' },
       ],
-      rules: [], // Will add detection rules later
-      requirementRules: [],
+      rules: [], // Will add detection/requirement rules later
     };
 
     const response = await graphClient.post<{ id: string }>('/deviceAppManagement/mobileApps', appBody);
@@ -452,7 +452,7 @@ export class IntuneUploader {
   }
 
   /**
-   * Add detection rules to the app
+   * Add detection rules (and requirement rules if present) to the app
    */
   private async addDetectionRules(
     graphClient: GraphClient,
@@ -460,11 +460,33 @@ export class IntuneUploader {
     job: PackagingJob
   ): Promise<void> {
     const detectionRules = this.buildDetectionRules(job);
+    const requirementRules = this.extractRequirementRules(job);
 
+    // Set detection rules using the detectionRules property (old format,
+    // compatible with the win32LobAppDetection type names used by buildDetectionRules)
     if (detectionRules.length > 0) {
       await graphClient.patch(`/deviceAppManagement/mobileApps/${appId}`, {
         '@odata.type': '#microsoft.graph.win32LobApp',
         detectionRules: detectionRules,
+      });
+    }
+
+    // If requirement rules exist (for "Update Only" mode), read the current
+    // unified rules array (which now includes the detection rules set above,
+    // converted to win32LobAppRule format by Graph internally), append the
+    // requirement rules, and PATCH back the complete set.
+    if (requirementRules.length > 0) {
+      const app = await graphClient.get<{ rules?: unknown[] }>(
+        `/deviceAppManagement/mobileApps/${appId}`
+      );
+      const currentRules = app.rules || [];
+      await graphClient.patch(`/deviceAppManagement/mobileApps/${appId}`, {
+        '@odata.type': '#microsoft.graph.win32LobApp',
+        rules: [...currentRules, ...requirementRules],
+      });
+      this.logger.info('Added requirement rules for Update Only mode', {
+        appId,
+        requirementRuleCount: requirementRules.length,
       });
     }
   }
@@ -617,7 +639,8 @@ export class IntuneUploader {
           if (
             intent !== 'required' &&
             intent !== 'available' &&
-            intent !== 'uninstall'
+            intent !== 'uninstall' &&
+            intent !== 'updateOnly'
           ) {
             return false;
           }
@@ -713,9 +736,13 @@ export class IntuneUploader {
           continue;
       }
 
+      // Map 'updateOnly' to 'required' for Graph API (requirement rules handle the gating)
+      const graphIntent: GraphAssignmentIntent =
+        assignment.intent === 'updateOnly' ? 'required' : assignment.intent;
+
       graphAssignments.push({
         '@odata.type': '#microsoft.graph.mobileAppAssignment',
-        intent: assignment.intent,
+        intent: graphIntent,
         target,
         settings: {
           '@odata.type': '#microsoft.graph.win32LobAppAssignmentSettings',
@@ -745,7 +772,7 @@ export class IntuneUploader {
         continue;
       }
 
-      let intent: AssignmentIntent;
+      let intent: GraphAssignmentIntent;
       if (assignment.intent === 'required') {
         intent = 'required';
       } else if (assignment.intent === 'uninstall') {
@@ -784,6 +811,25 @@ export class IntuneUploader {
     await graphClient.post(`/deviceAppManagement/mobileApps/${appId}/assign`, {
       mobileAppAssignments: assignments,
     });
+  }
+
+  /**
+   * Extract requirement rules from job configuration.
+   * Requirement rules are already in Graph API format (ruleType: 'requirement').
+   */
+  private extractRequirementRules(job: PackagingJob): unknown[] {
+    const packageConfig = this.asRecord(job.package_config);
+    if (!packageConfig) {
+      return [];
+    }
+
+    const requirementRules = packageConfig.requirementRules;
+    if (!Array.isArray(requirementRules) || requirementRules.length === 0) {
+      return [];
+    }
+
+    // Requirement rules are already in Graph API format, pass through directly
+    return requirementRules;
   }
 
   /**

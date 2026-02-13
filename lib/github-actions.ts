@@ -21,6 +21,7 @@ export interface WorkflowInputs {
   callbackUrl: string;
   psadtConfig?: string; // JSON-serialized PSADTConfig
   detectionRules?: string; // JSON-serialized DetectionRule[]
+  requirementRules?: string; // JSON-serialized RequirementRule[]
   assignments?: string; // JSON-serialized PackageAssignment[]
   categories?: string; // JSON-serialized IntuneAppCategorySelection[]
   installScope?: 'machine' | 'user'; // Install scope for per-user vs per-machine
@@ -129,6 +130,7 @@ export async function triggerPackagingWorkflow(
         config: {
           psadtConfig: inputs.psadtConfig || '{}',
           detectionRules: inputs.detectionRules || '[]',
+          requirementRules: inputs.requirementRules || '[]',
           assignments: inputs.assignments || '[]',
           categories: inputs.categories || '[]',
           installScope: inputs.installScope || 'machine',

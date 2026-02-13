@@ -6,6 +6,7 @@
 import type {
   IntuneWin32App,
   DetectionRule,
+  RequirementRule,
   Win32LobAppAssignment,
   WindowsMinimumOperatingSystem,
   EntraIDGroup,
@@ -287,9 +288,17 @@ export async function updateAppWithContent(
 export async function setDetectionRules(
   accessToken: string,
   appId: string,
-  rules: DetectionRule[]
+  rules: DetectionRule[],
+  requirementRules?: RequirementRule[]
 ): Promise<void> {
-  const graphRules = rules.map(convertToGraphDetectionRule);
+  const graphRules: Record<string, unknown>[] = rules.map(convertToGraphDetectionRule);
+
+  // Merge requirement rules into the rules array (they are already in Graph format)
+  if (requirementRules && requirementRules.length > 0) {
+    for (const reqRule of requirementRules) {
+      graphRules.push(reqRule as unknown as Record<string, unknown>);
+    }
+  }
 
   const response = await fetch(
     `${GRAPH_API_BASE}/deviceAppManagement/mobileApps/${appId}`,
@@ -561,9 +570,12 @@ export function convertToGraphAssignments(
         throw new Error(`Unknown assignment type: ${(assignment as PackageAssignment).type}`);
     }
 
+    // Map 'updateOnly' to 'required' for Graph API (requirement rules handle the gating)
+    const graphIntent = assignment.intent === 'updateOnly' ? 'required' : assignment.intent;
+
     return {
       '@odata.type': '#microsoft.graph.mobileAppAssignment',
-      intent: assignment.intent,
+      intent: graphIntent,
       target,
       settings: {
         '@odata.type': '#microsoft.graph.win32LobAppAssignmentSettings',

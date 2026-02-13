@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { AssignmentConfig } from '@/components/AssignmentConfig';
 import { CategoryConfig } from '@/components/CategoryConfig';
 import type { CartItem, IntuneAppCategorySelection, PackageAssignment } from '@/types/upload';
+import type { RequirementRule } from '@/types/intune';
 import type {
   PSADTConfig,
   ProcessToClose,
@@ -36,6 +37,7 @@ import type {
 } from '@/types/psadt';
 import type { WingetScope } from '@/types/winget';
 import { useCartStore } from '@/stores/cart-store';
+import { generateRequirementRules } from '@/lib/requirement-rules';
 
 interface CartItemConfigProps {
   item: CartItem;
@@ -112,11 +114,21 @@ export function CartItemConfig({ item, onClose }: CartItemConfigProps) {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Generate requirement rules if any assignment uses "Update Only"
+      let requirementRules: RequirementRule[] | undefined;
+      if (assignments.some((a) => a.intent === 'updateOnly')) {
+        requirementRules = generateRequirementRules(
+          item.displayName,
+          item.installerType
+        );
+      }
+
       updateItem(item.id, {
         installScope: selectedScope,
         psadtConfig: config,
         assignments: assignments.length > 0 ? assignments : undefined,
         categories: categories.length > 0 ? categories : undefined,
+        requirementRules,
         installCommand,
         uninstallCommand,
       });
