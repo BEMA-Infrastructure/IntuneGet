@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Github, Linkedin, ExternalLink, Apple } from "lucide-react";
+import { Github, Linkedin, ExternalLink, Apple, ShieldCheck, LucideIcon } from "lucide-react";
 import { FadeIn } from "../animations/FadeIn";
+import { StaggerContainer, StaggerItem } from "../animations/StaggerContainer";
+import { GradientOrb } from "../ui/GradientOrb";
 
 const footerLinks = {
   product: [
     { label: "Features", href: "/#features" },
     { label: "How It Works", href: "/#how-it-works" },
+    { label: "Pricing", href: "/pricing" },
     { label: "Documentation", href: "/docs" },
   ],
   company: [
@@ -21,8 +24,8 @@ const footerLinks = {
     { label: "Terms of Service", href: "/terms" },
   ],
   ecosystem: [
-    { label: "IntuneBrew", description: "macOS App Deployment", href: "https://intunebrew.com", external: true },
-    { label: "TenuVault", description: "Intune Backup & Restore", href: "https://www.tenuvault.com/", external: true },
+    { label: "IntuneBrew", description: "macOS App Deployment", href: "https://intunebrew.com", external: true, icon: Apple as LucideIcon },
+    { label: "TenuVault", description: "Intune Backup & Restore", href: "https://www.tenuvault.com/", external: true, icon: ShieldCheck as LucideIcon },
   ],
 };
 
@@ -35,13 +38,25 @@ export function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="relative w-full bg-bg-elevated border-t border-overlay/[0.06]">
+    <footer className="relative w-full bg-bg-elevated overflow-hidden">
+      {/* Gradient line at top */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent-cyan/20 to-transparent" />
+
+      {/* Background orb */}
+      <GradientOrb
+        color="cyan"
+        size="lg"
+        intensity="low"
+        animate={false}
+        className="absolute -bottom-48 -right-24"
+      />
+
       {/* Main footer content */}
-      <div className="container relative px-4 md:px-6 mx-auto max-w-7xl py-12 md:py-16">
-        <FadeIn>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-8 md:gap-10">
+      <div className="container relative px-4 md:px-6 mx-auto max-w-7xl py-16 md:py-20">
+        <StaggerContainer staggerDelay={0.08} delayStart={0.1}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-8 md:gap-10">
             {/* Brand column */}
-            <div className="col-span-2">
+            <StaggerItem className="col-span-1 sm:col-span-2">
               <Link href="/" className="flex items-center gap-2 group mb-4">
                 <div className="relative">
                   <Image
@@ -73,27 +88,28 @@ export function Footer() {
                   </a>
                 ))}
               </div>
-            </div>
+            </StaggerItem>
 
             {/* Product links */}
-            <div>
+            <StaggerItem>
               <h4 className="text-sm font-semibold text-text-primary mb-4">Product</h4>
               <ul className="space-y-3">
                 {footerLinks.product.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-text-muted hover:text-text-primary transition-colors"
+                      className="relative text-sm text-text-muted hover:text-text-primary transition-colors group"
                     >
                       {link.label}
+                      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                     </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </StaggerItem>
 
             {/* Company links */}
-            <div>
+            <StaggerItem>
               <h4 className="text-sm font-semibold text-text-primary mb-4">Company</h4>
               <ul className="space-y-3">
                 {footerLinks.company.map((link) => (
@@ -101,42 +117,45 @@ export function Footer() {
                     {link.href.startsWith("mailto:") ? (
                       <a
                         href={link.href}
-                        className="text-sm text-text-muted hover:text-text-primary transition-colors inline-flex items-center gap-1"
+                        className="relative text-sm text-text-muted hover:text-text-primary transition-colors inline-flex items-center gap-1 group"
                       >
                         {link.label}
+                        <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                       </a>
                     ) : (
                       <Link
                         href={link.href}
-                        className="text-sm text-text-muted hover:text-text-primary transition-colors inline-flex items-center gap-1"
+                        className="relative text-sm text-text-muted hover:text-text-primary transition-colors inline-flex items-center gap-1 group"
                       >
                         {link.label}
+                        <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                       </Link>
                     )}
                   </li>
                 ))}
               </ul>
-            </div>
+            </StaggerItem>
 
             {/* Legal links */}
-            <div>
+            <StaggerItem>
               <h4 className="text-sm font-semibold text-text-primary mb-4">Legal</h4>
               <ul className="space-y-3">
                 {footerLinks.legal.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-text-muted hover:text-text-primary transition-colors"
+                      className="relative text-sm text-text-muted hover:text-text-primary transition-colors group"
                     >
                       {link.label}
+                      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                     </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </StaggerItem>
 
             {/* Ecosystem links */}
-            <div>
+            <StaggerItem>
               <h4 className="text-sm font-semibold text-text-primary mb-4">Ecosystem</h4>
               <ul className="space-y-3">
                 {footerLinks.ecosystem.map((link) => (
@@ -148,45 +167,47 @@ export function Footer() {
                       className="group"
                     >
                       <span className="text-sm text-text-muted hover:text-accent-cyan transition-colors inline-flex items-center gap-1.5">
-                        <Apple className="w-4 h-4" />
+                        <link.icon className="w-4 h-4" />
                         {link.label}
                         {link.external && <ExternalLink className="w-3 h-3" />}
                       </span>
-                      <span className="block text-xs text-text-muted mt-0.5 ml-5.5">
+                      <span className="block text-xs text-text-muted mt-0.5 ml-[22px]">
                         {link.description}
                       </span>
                     </a>
                   </li>
                 ))}
               </ul>
-            </div>
+            </StaggerItem>
           </div>
-        </FadeIn>
+        </StaggerContainer>
       </div>
 
       {/* Bottom bar */}
       <div className="border-t border-overlay/[0.06]">
         <div className="container relative px-4 md:px-6 mx-auto max-w-7xl py-6">
-          <FadeIn delay={0.1}>
+          <FadeIn delay={0.4}>
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-text-muted">
               <p>
-                {currentYear}{" "}
+                &copy; {currentYear}{" "}
                 <a
                   href="https://ugurlabs.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-cyan hover:text-accent-cyan-dim transition-colors"
+                  className="relative text-accent-cyan hover:text-accent-cyan-dim transition-colors group"
                 >
                   UgurLabs
+                  <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                 </a>
                 . Made with care by{" "}
                 <a
                   href="https://www.linkedin.com/in/ugurkocde/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-cyan hover:text-accent-cyan-dim transition-colors"
+                  className="relative text-accent-cyan hover:text-accent-cyan-dim transition-colors group"
                 >
                   Ugur Koc
+                  <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                 </a>
               </p>
               <p className="text-center md:text-right">
@@ -195,9 +216,10 @@ export function Footer() {
                   href="https://github.com/ugurkocde/IntuneGet"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-cyan hover:text-accent-cyan-dim transition-colors"
+                  className="relative text-accent-cyan hover:text-accent-cyan-dim transition-colors group"
                 >
                   GitHub
+                  <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
                 </a>
               </p>
             </div>
