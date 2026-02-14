@@ -32,6 +32,8 @@ export interface StagedPackage {
   // Detection
   detectionRules: DetectionRule[];
 
+  description?: string;
+
   // Requirement rules (for "Update Only" - check app existence before install)
   requirementRules?: RequirementRule[];
 

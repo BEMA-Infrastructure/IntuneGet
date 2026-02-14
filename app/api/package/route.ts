@@ -16,6 +16,7 @@ import { getAppConfig } from '@/lib/config';
 import { getFeatureFlags } from '@/lib/features';
 import { verifyTenantConsent } from '@/lib/msp/consent-verification';
 import { extractSilentSwitches } from '@/lib/msp/silent-switches';
+import { buildIntuneAppDescription } from '@/lib/intune-description';
 import type { CartItem } from '@/types/upload';
 
 interface PackageRequestBody {
@@ -253,7 +254,10 @@ export async function POST(request: NextRequest) {
           tenantId,
           wingetId: item.wingetId,
           displayName: item.displayName,
-          description: item.description,
+          description: buildIntuneAppDescription({
+            description: item.description,
+            fallback: `Deployed via IntuneGet from Winget: ${item.wingetId}`,
+          }),
           publisher: item.publisher,
           version: item.version,
           architecture: item.architecture,

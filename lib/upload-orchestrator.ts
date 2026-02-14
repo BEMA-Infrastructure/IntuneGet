@@ -6,6 +6,7 @@
 import type { CartItem, StagedPackage, UploadJob, PackagingJob } from '@/types/upload';
 import type { DetectionRule } from '@/types/intune';
 import { resolveInstallerFileName } from '@/lib/installer-filename';
+import { buildIntuneAppDescription } from '@/lib/intune-description';
 import {
   createWin32App,
   createContentVersion,
@@ -47,10 +48,14 @@ export async function deployToIntune(
   try {
     // Step 1: Create the Win32 app in Intune
     onProgress?.(jobId, 'uploading', 10, 'Creating Win32 app in Intune...');
+    const description = buildIntuneAppDescription({
+      description: stagedPackage.description,
+      fallback: `Deployed via IntuneGet from Winget: ${stagedPackage.wingetId}`,
+    });
 
     const appId = await createWin32App(accessToken, {
       displayName: stagedPackage.displayName,
-      description: `Deployed via IntuneGet from Winget: ${stagedPackage.wingetId}`,
+      description,
       publisher: stagedPackage.publisher,
       fileName: installerFileName,
       installCommandLine: stagedPackage.installCommand,
@@ -231,6 +236,7 @@ export function cartItemToStagedPackage(
     installerSha256: item.installerSha256,
     installCommand: item.installCommand,
     uninstallCommand: item.uninstallCommand,
+    description: item.description,
     detectionRules: item.detectionRules,
     requirementRules: item.requirementRules,
     status: 'pending',
