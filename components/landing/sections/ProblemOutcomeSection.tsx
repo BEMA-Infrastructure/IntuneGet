@@ -12,7 +12,7 @@ const problems = [
 ];
 
 const outcomes = [
-  { icon: Zap, text: "Deploy any app in minutes" },
+  { icon: Zap, text: "Deploy any Winget app to Intune in minutes" },
   { icon: Layers, text: "Zero scripting required" },
   { icon: RefreshCw, text: "Automatic version updates" },
   { icon: Shield, text: "99.9% deployment success rate" },
@@ -31,7 +31,7 @@ export function ProblemOutcomeSection() {
               Before & After
             </span>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary">
-              Transform Your Deployment Workflow
+              Transform Your Winget-to-Intune Workflow
             </h2>
             <p className="mx-auto max-w-2xl text-lg text-text-secondary">
               See how IntuneGet eliminates the complexity from enterprise app deployment

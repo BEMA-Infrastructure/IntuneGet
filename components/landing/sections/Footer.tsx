@@ -14,6 +14,11 @@ const footerLinks = {
     { label: "Pricing", href: "/pricing" },
     { label: "Documentation", href: "/docs" },
   ],
+  resources: [
+    { label: "Blog", href: "/blog" },
+    { label: "Winget to Intune Guide", href: "/blog/deploy-winget-apps-to-intune" },
+    { label: "SCCM Migration Guide", href: "/blog/sccm-to-intune-migration-winget" },
+  ],
   company: [
     { label: "About", href: "/about" },
     { label: "Changelog", href: "/changelog" },
@@ -54,7 +59,7 @@ export function Footer() {
       {/* Main footer content */}
       <div className="container relative px-4 md:px-6 mx-auto max-w-7xl py-16 md:py-20">
         <StaggerContainer staggerDelay={0.08} delayStart={0.1}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-8 md:gap-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-8 md:gap-10">
             {/* Brand column */}
             <StaggerItem className="col-span-1 sm:col-span-2">
               <Link href="/" className="flex items-center gap-2 group mb-4">
@@ -95,6 +100,24 @@ export function Footer() {
               <h4 className="text-sm font-semibold text-text-primary mb-4">Product</h4>
               <ul className="space-y-3">
                 {footerLinks.product.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="relative text-sm text-text-muted hover:text-text-primary transition-colors group"
+                    >
+                      {link.label}
+                      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-accent-cyan transition-all duration-300 group-hover:w-full" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </StaggerItem>
+
+            {/* Resources links */}
+            <StaggerItem>
+              <h4 className="text-sm font-semibold text-text-primary mb-4">Resources</h4>
+              <ul className="space-y-3">
+                {footerLinks.resources.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}

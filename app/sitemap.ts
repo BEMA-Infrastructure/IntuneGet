@@ -1,4 +1,5 @@
 import { MetadataRoute } from "next";
+import { blogPosts } from "@/lib/data/blog-data";
 
 const BASE_URL = "https://intuneget.com";
 
@@ -71,5 +72,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: path === "" ? 0.9 : 0.7,
   }));
 
-  return [...staticPages, ...documentationPages];
+  // Blog pages
+  const blogIndex: MetadataRoute.Sitemap = [
+    {
+      url: `${BASE_URL}/blog`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+  ];
+
+  const blogPostPages: MetadataRoute.Sitemap = blogPosts.map((post) => ({
+    url: `${BASE_URL}/blog/${post.slug}`,
+    lastModified: new Date(post.date),
+    changeFrequency: "monthly" as const,
+    priority: post.isPillar ? 0.9 : 0.7,
+  }));
+
+  return [...staticPages, ...documentationPages, ...blogIndex, ...blogPostPages];
 }

@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
-import { Clock } from "lucide-react";
+import { Clock, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { FadeIn } from "../animations/FadeIn";
 
 const steps = [
@@ -18,14 +19,14 @@ const steps = [
     title: "Package with Winget",
     timeEstimate: "2-3 minutes",
     description:
-      "Our tool automatically packages your selected applications using Winget, handling all the complexity.",
+      "IntuneGet automatically packages your selected applications using Winget into the .intunewin format, handling all the complexity.",
   },
   {
     number: "03",
     title: "Upload to Intune",
     timeEstimate: "1-2 minutes",
     description:
-      "Packaged applications are seamlessly uploaded to your Intune environment, ready for deployment.",
+      "Packaged applications are seamlessly uploaded to your Microsoft Intune environment, ready for deployment to your managed devices.",
   },
 ];
 
@@ -53,7 +54,7 @@ export function HowItWorksSection() {
           </FadeIn>
           <FadeIn delay={0.1}>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary">
-              How It Works
+              How Winget-to-Intune Deployment Works
             </h2>
           </FadeIn>
           <FadeIn delay={0.2}>
@@ -138,6 +139,19 @@ export function HowItWorksSection() {
               </FadeIn>
             ))}
           </div>
+
+          {/* Internal link to pillar blog post */}
+          <FadeIn delay={0.5}>
+            <div className="text-center mt-12">
+              <Link
+                href="/blog/deploy-winget-apps-to-intune"
+                className="inline-flex items-center gap-2 text-accent-cyan hover:text-accent-cyan-dim font-medium transition-colors"
+              >
+                Read our complete guide to deploying Winget apps to Intune
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </FadeIn>
         </div>
       </div>
     </section>

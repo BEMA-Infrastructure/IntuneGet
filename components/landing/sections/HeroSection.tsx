@@ -78,9 +78,9 @@ export function HeroSection() {
             {/* Subheadline with authoritative statement */}
             <FadeIn delay={0.1} animateOnMount duration={0.4} direction="up">
               <p className="max-w-lg text-lg md:text-xl text-text-secondary leading-relaxed">
-                Search {supportedAppsDisplay}+ packages, package automatically, and
-                deploy without scripting. Built for IT teams that want speed
-                without hidden costs.
+                Search {supportedAppsDisplay}+ Winget packages, package automatically, and
+                deploy to Microsoft Intune without scripting. Built for IT teams
+                that want speed without hidden costs.
               </p>
             </FadeIn>
 

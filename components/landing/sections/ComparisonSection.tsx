@@ -105,12 +105,12 @@ export function ComparisonSection() {
           </motion.div>
           <SlideIn direction="up" distance={30} duration={0.5} delay={0.1}>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary">
-              Why Choose IntuneGet?
+              IntuneGet vs Manual Winget Deployment
             </h2>
           </SlideIn>
           <FadeIn delay={0.2}>
             <p className="mx-auto max-w-2xl text-lg text-text-secondary">
-              See how IntuneGet compares to manual deployment processes
+              See how IntuneGet automates Winget app deployment compared to manual processes
             </p>
           </FadeIn>
         </div>

@@ -30,7 +30,7 @@ export function CTASection() {
 
           <FadeIn delay={0.1}>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary">
-              Ready to Stop Wasting Fridays on App Packaging?
+              Ready to Deploy Winget Apps to Intune in Minutes?
             </h2>
           </FadeIn>
 

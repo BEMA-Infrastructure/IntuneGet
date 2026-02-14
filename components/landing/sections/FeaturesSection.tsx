@@ -74,15 +74,15 @@ export function CapabilitiesSection() {
           </FadeIn>
           <TextReveal
             as="h2"
-            text="Built for IT Teams at Scale"
+            text="Winget-Powered Features Built for IT Teams"
             className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary"
             delay={0.1}
             staggerDelay={0.04}
           />
           <FadeIn delay={0.2}>
             <p className="mx-auto max-w-2xl text-lg text-text-secondary">
-              Powerful automation features that streamline your Intune app
-              deployment from discovery to delivery
+              Powerful Winget-to-Intune automation features that streamline
+              your app deployment from discovery to delivery
             </p>
           </FadeIn>
         </div>
