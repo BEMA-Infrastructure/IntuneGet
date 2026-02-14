@@ -107,7 +107,9 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
     { items: coreNav },
     { label: 'Management', items: managementNav },
     { label: 'Analytics', items: analyticsNav },
-    ...(isMspUser ? [{ label: 'MSP', items: mspNav }] : []),
+    ...(isMspUser
+      ? [{ label: 'MSP', items: mspNav }]
+      : [{ label: 'MSP', items: [{ name: 'MSP Dashboard', href: '/dashboard/msp', icon: Building2 }] }]),
   ];
 
   const sidebarContent = (

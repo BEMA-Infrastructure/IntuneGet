@@ -64,6 +64,7 @@ interface PackagingJob {
   intune_app_id?: string;
   intune_app_url?: string;
   created_at: string;
+  updated_at: string;
   packaging_started_at?: string;
   packaging_completed_at?: string;
   completed_at?: string;
@@ -558,6 +559,7 @@ function UploadJobCard({
   const config = statusConfig[job.status] || statusConfig.queued;
   const StatusIcon = config.icon;
   const isActive = ['queued', 'packaging', 'uploading'].includes(job.status);
+  const isStale = isActive && (Date.now() - new Date(job.updated_at).getTime()) > 30 * 60 * 1000;
   // Allow cancelling active jobs or dismissing completed/failed jobs
   const isCancellable = ['queued', 'packaging', 'uploading'].includes(job.status);
   const isDismissable = ['completed', 'failed', 'duplicate_skipped'].includes(job.status);
@@ -696,6 +698,11 @@ function UploadJobCard({
                 )}
                 {config.label}
               </span>
+              {isStale && (
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-status-warning/10 text-status-warning">
+                  (stale)
+                </span>
+              )}
             </div>
           </div>
 
