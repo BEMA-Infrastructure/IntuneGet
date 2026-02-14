@@ -630,36 +630,88 @@ jobs:
             progress = 80
           } -CallbackUrl $env:CALLBACK_URL -CallbackSecret $env:CALLBACK_SECRET | Out-Null
 
-          # 5. Upload encrypted content file in chunks (6MB blocks) - using ISO-8859-1 encoding per MS reference
-          $chunkSize = 6MB
+          # 5. Upload encrypted content file in parallel chunks (25MB blocks, 4 concurrent)
+          # Uses .NET HttpClient with ByteArrayContent for true async I/O and zero-copy uploads
+          $chunkSize = 25MB
+          $concurrency = 4
           $uploadFilePath = $env:ENCRYPTED_FILE_PATH
+          $fileSize = (Get-Item $uploadFilePath).Length
+          $totalChunks = [Math]::Ceiling($fileSize / $chunkSize)
           Write-Host "Uploading file: $uploadFilePath"
-          $fileStream = [System.IO.File]::OpenRead($uploadFilePath)
-          $buffer = New-Object byte[] $chunkSize
+          Write-Host "Upload strategy: $totalChunks chunks x 25MB, ${concurrency}x parallel"
+
+          # Pre-compute all block IDs upfront for the final commit
           $blockIds = @()
-          $blockNum = 0
-          $iso = [System.Text.Encoding]::GetEncoding("iso-8859-1")
-
-          while (($bytesRead = $fileStream.Read($buffer, 0, $chunkSize)) -gt 0) {
-            # Block ID format must match reference: ASCII bytes of 4-digit padded number
-            $blockId = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($blockNum.ToString("0000")))
-            $blockIds += $blockId
-
-            $chunkData = $buffer[0..($bytesRead-1)]
-            $chunkBody = $iso.GetString($chunkData)
-            $blockUri = "$azureStorageUri&comp=block&blockid=$([System.Uri]::EscapeDataString($blockId))"
-
-            $chunkHeaders = @{
-              "x-ms-blob-type" = "BlockBlob"
-            }
-            Invoke-WebRequest -Uri $blockUri -Method PUT -Headers $chunkHeaders -Body $chunkBody -ContentType "text/plain; charset=iso-8859-1" -UseBasicParsing | Out-Null
-            if ($blockNum % 5 -eq 0 -or $blockNum -eq 0) {
-              Write-Host "Upload progress: chunk $blockNum"
-            }
-            $blockNum++
+          for ($i = 0; $i -lt $totalChunks; $i++) {
+            $blockIds += [System.Convert]::ToBase64String(
+              [System.Text.Encoding]::ASCII.GetBytes($i.ToString("0000"))
+            )
           }
+
+          # Create HttpClient with connection pooling for parallel uploads
+          $handler = [System.Net.Http.SocketsHttpHandler]::new()
+          $handler.MaxConnectionsPerServer = $concurrency
+          $handler.PooledConnectionLifetime = [TimeSpan]::FromMinutes(10)
+          $httpClient = [System.Net.Http.HttpClient]::new($handler)
+          $httpClient.Timeout = [TimeSpan]::FromMinutes(30)
+
+          # Pre-allocate reusable byte buffers (one per concurrent slot)
+          $buffers = @()
+          for ($i = 0; $i -lt $concurrency; $i++) {
+            $buffers += (, (New-Object byte[] $chunkSize))
+          }
+
+          $fileStream = [System.IO.File]::OpenRead($uploadFilePath)
+          $chunkIndex = 0
+          $batchCount = 0
+
+          while ($chunkIndex -lt $totalChunks) {
+            $batchSize = [Math]::Min($concurrency, $totalChunks - $chunkIndex)
+            $batchCount++
+
+            $tasks = @()
+            $requests = @()
+            for ($slot = 0; $slot -lt $batchSize; $slot++) {
+              $bytesRead = $fileStream.Read($buffers[$slot], 0, $chunkSize)
+
+              $blockId = $blockIds[$chunkIndex + $slot]
+              $blockUri = "$azureStorageUri&comp=block&blockid=$([System.Uri]::EscapeDataString($blockId))"
+
+              $content = [System.Net.Http.ByteArrayContent]::new($buffers[$slot], 0, $bytesRead)
+              $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("application/octet-stream")
+
+              $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Put, $blockUri)
+              $request.Headers.TryAddWithoutValidation("x-ms-blob-type", "BlockBlob")
+              $request.Content = $content
+
+              $requests += $request
+              $tasks += $httpClient.SendAsync($request)
+            }
+
+            [System.Threading.Tasks.Task]::WaitAll($tasks)
+
+            for ($slot = 0; $slot -lt $batchSize; $slot++) {
+              $response = $tasks[$slot].Result
+              if ([int]$response.StatusCode -ge 300) {
+                $errBody = $response.Content.ReadAsStringAsync().Result
+                $response.Dispose()
+                $requests[$slot].Dispose()
+                throw "Chunk $($chunkIndex + $slot) failed: HTTP $([int]$response.StatusCode) - $errBody"
+              }
+              $response.Dispose()
+              $requests[$slot].Dispose()
+            }
+
+            if ($batchCount % 4 -eq 0 -or ($chunkIndex + $batchSize) -ge $totalChunks) {
+              $uploadedChunks = $chunkIndex + $batchSize
+              Write-Host "Upload progress: $uploadedChunks/$totalChunks chunks"
+            }
+
+            $chunkIndex += $batchSize
+          }
+
           $fileStream.Close()
-          Write-Host "Upload complete: $blockNum chunks uploaded"
+          Write-Host "Upload complete: $totalChunks chunks uploaded"
 
           # 6. Commit blocks to Azure Storage
           $blockListXml = '<?xml version="1.0" encoding="utf-8"?><BlockList>'
@@ -669,7 +721,15 @@ jobs:
           $blockListXml += '</BlockList>'
 
           $commitUri = "$azureStorageUri&comp=blocklist"
-          Invoke-WebRequest -Uri $commitUri -Method PUT -Body $blockListXml -ContentType "text/plain; charset=UTF-8" -UseBasicParsing | Out-Null
+          $commitContent = [System.Net.Http.StringContent]::new($blockListXml, [System.Text.Encoding]::UTF8, "text/plain")
+          $commitResp = $httpClient.PutAsync($commitUri, $commitContent).Result
+          if ([int]$commitResp.StatusCode -ge 300) {
+            $commitErr = $commitResp.Content.ReadAsStringAsync().Result
+            $commitResp.Dispose()
+            throw "Block list commit failed: HTTP $([int]$commitResp.StatusCode) - $commitErr"
+          }
+          $commitResp.Dispose()
+          $httpClient.Dispose()
           Write-Host "Block list committed to Azure Storage"
 
           # 7. Commit file with encryption info
