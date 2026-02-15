@@ -139,7 +139,7 @@ export class AutoUpdateTrigger {
       }
 
       // Safety check 4: Check rate limits
-      const rateLimitResult = await this.checkRateLimits(policy.user_id, policy.tenant_id);
+      const rateLimitResult = await this.checkRateLimits(policy.user_id, policy.tenant_id, policy.id);
       if (!rateLimitResult.allowed) {
         return {
           success: false,
@@ -202,7 +202,7 @@ export class AutoUpdateTrigger {
   /**
    * Check rate limits for auto-updates
    */
-  private async checkRateLimits(userId: string, tenantId: string): Promise<RateLimitCheck> {
+  private async checkRateLimits(userId: string, tenantId: string, policyId: string): Promise<RateLimitCheck> {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { rateLimits } = this.safetyConfig;
 
@@ -265,6 +265,7 @@ export class AutoUpdateTrigger {
     const { data: recentUpdate } = await this.supabase
       .from('auto_update_history')
       .select('id')
+      .eq('policy_id', policyId)
       .gte('triggered_at', cooldownTime)
       .limit(1);
 
