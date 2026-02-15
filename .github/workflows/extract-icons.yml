@@ -231,7 +231,7 @@ jobs:
     needs: [extract-web-icons]
     timeout-minutes: 180
     if: >
-      inputs.skip_binary != 'true' &&
+      github.event.inputs.skip_binary != 'true' &&
       (github.event_name == 'workflow_dispatch' ||
        github.event_name == 'schedule' ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
