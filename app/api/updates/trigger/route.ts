@@ -10,6 +10,15 @@ import {
   AutoUpdateTrigger,
   getLatestInstallerInfo,
 } from '@/lib/auto-update/trigger';
+import {
+  isGitHubActionsConfigured,
+  triggerPackagingWorkflow,
+} from '@/lib/github-actions';
+import { getAppConfig } from '@/lib/config';
+import { getFeatureFlags } from '@/lib/features';
+import { extractSilentSwitches } from '@/lib/msp/silent-switches';
+import { buildIntuneAppDescription } from '@/lib/intune-description';
+import type { WorkflowInputs } from '@/lib/github-actions';
 import type {
   TriggerUpdateRequest,
   TriggerUpdateResponse,
@@ -402,13 +411,67 @@ export async function POST(request: NextRequest) {
         installerInfo.currentVersion = updateResult.current_version;
         installerInfo.currentIntuneAppId = updateResult.intune_app_id;
 
-        // Trigger the update
+        // Trigger the update (creates packaging job + history record in DB)
         const triggerResult = await autoUpdateTrigger.triggerAutoUpdate(
           policy as AppUpdatePolicy,
           installerInfo
         );
 
-        if (triggerResult.success) {
+        if (triggerResult.success && triggerResult.packagingJobId) {
+          // Dispatch the GitHub Actions workflow to actually run the packaging
+          const features = getFeatureFlags();
+          const isLocalPackagerMode = features.localPackager;
+
+          if (!isLocalPackagerMode && isGitHubActionsConfigured()) {
+            const appConfig = getAppConfig();
+            const baseUrl = appConfig.app.url || (process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL}`
+              : 'http://localhost:3000');
+            const callbackUrl = `${baseUrl}/api/package/callback`;
+
+            const deploymentConfig = policy.deployment_config as unknown as DeploymentConfig;
+
+            const workflowInputs: WorkflowInputs = {
+              jobId: triggerResult.packagingJobId,
+              tenantId: req.tenant_id,
+              wingetId: req.winget_id,
+              displayName: deploymentConfig.displayName || installerInfo.displayName,
+              description: buildIntuneAppDescription({
+                description: deploymentConfig.description,
+                fallback: `Deployed via IntuneGet from Winget: ${req.winget_id}`,
+              }),
+              publisher: deploymentConfig.publisher || 'Unknown Publisher',
+              version: installerInfo.latestVersion,
+              architecture: deploymentConfig.architecture || 'x64',
+              installerUrl: installerInfo.installerUrl,
+              installerSha256: installerInfo.installerSha256 || '',
+              installerType: installerInfo.installerType || deploymentConfig.installerType || 'exe',
+              silentSwitches: extractSilentSwitches(
+                deploymentConfig.installCommand || '',
+                installerInfo.installerType || deploymentConfig.installerType || 'exe'
+              ),
+              uninstallCommand: deploymentConfig.uninstallCommand || '',
+              callbackUrl,
+              detectionRules: deploymentConfig.detectionRules
+                ? JSON.stringify(deploymentConfig.detectionRules)
+                : undefined,
+              assignments: deploymentConfig.assignments
+                ? JSON.stringify(deploymentConfig.assignments)
+                : undefined,
+              categories: deploymentConfig.categories
+                ? JSON.stringify(deploymentConfig.categories)
+                : undefined,
+              installScope: (deploymentConfig.installScope === 'user' ? 'user' : 'machine') as 'machine' | 'user',
+              forceCreate: deploymentConfig.forceCreateNewApp !== false,
+            };
+
+            const isBatch = updateRequests.length > 1;
+            await triggerPackagingWorkflow(workflowInputs, undefined, {
+              skipRunCapture: isBatch,
+            });
+          }
+          // If local packager mode, the job stays in 'queued'/'packaging' for local pickup
+
           response.triggered++;
           response.results.push({
             winget_id: req.winget_id,
@@ -416,7 +479,7 @@ export async function POST(request: NextRequest) {
             success: true,
             packaging_job_id: triggerResult.packagingJobId,
           });
-        } else {
+        } else if (!triggerResult.success) {
           response.failed++;
           response.results.push({
             winget_id: req.winget_id,
