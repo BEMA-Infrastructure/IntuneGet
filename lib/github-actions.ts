@@ -81,10 +81,14 @@ export interface TriggerResult {
 /**
  * Trigger the packaging workflow via repository_dispatch to private workflows repo
  * Returns the workflow run ID if it can be captured
+ *
+ * @param skipRunCapture - When true, skip the run ID polling and return immediately.
+ *   Useful for batch dispatches where concurrent triggers make polling unreliable.
  */
 export async function triggerPackagingWorkflow(
   inputs: WorkflowInputs,
-  config?: GitHubActionsConfig
+  config?: GitHubActionsConfig,
+  options?: { skipRunCapture?: boolean }
 ): Promise<TriggerResult> {
   const cfg = config || getGitHubActionsConfig();
 
@@ -148,6 +152,10 @@ export async function triggerPackagingWorkflow(
   }
 
   // repository_dispatch returns 204 No Content on success
+  if (options?.skipRunCapture) {
+    return { success: true };
+  }
+
   // Try to capture the run ID by polling recent runs in the private repo
   const runInfo = await captureWorkflowRunId(triggerTime, cfg);
 

@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { getDatabase, isSqliteMode } from '@/lib/db';
+import { getDatabase } from '@/lib/db';
 import {
   isGitHubActionsConfigured,
   triggerPackagingWorkflow,
@@ -18,6 +18,8 @@ import { verifyTenantConsent } from '@/lib/msp/consent-verification';
 import { extractSilentSwitches } from '@/lib/msp/silent-switches';
 import { buildIntuneAppDescription } from '@/lib/intune-description';
 import type { CartItem } from '@/types/upload';
+
+export const maxDuration = 60;
 
 interface PackageRequestBody {
   items: CartItem[];
@@ -193,16 +195,19 @@ export async function POST(request: NextRequest) {
     // Get database adapter (SQLite or Supabase)
     const db = getDatabase();
 
-    // Process each item
+    // Phase 1: Create all job records sequentially (fast DB inserts)
     const jobs: PackagingJobRecord[] = [];
     const errors: { wingetId: string; error: string }[] = [];
+    const pendingDispatches: {
+      item: CartItem;
+      jobId: string;
+      createdAt: string;
+    }[] = [];
 
     for (const item of items) {
       try {
-        // Generate a unique job ID
         const jobId = crypto.randomUUID();
 
-        // Create job record in database
         const jobRecord = await db.jobs.create({
           id: jobId,
           user_id: userId,
@@ -247,8 +252,26 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // GitHub Actions mode: trigger workflow
-        // Prepare workflow inputs
+        pendingDispatches.push({
+          item,
+          jobId,
+          createdAt: jobRecord?.created_at || new Date().toISOString(),
+        });
+      } catch (error) {
+        errors.push({
+          wingetId: item.wingetId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Phase 2: Dispatch all GitHub Actions workflows in parallel
+    // Skip run ID capture for batch dispatches -- concurrent triggers with shared
+    // timestamps make the polling unreliable. Single-item deploys still capture it.
+    const isBatch = pendingDispatches.length > 1;
+
+    const dispatchResults = await Promise.allSettled(
+      pendingDispatches.map(async ({ item, jobId, createdAt }) => {
         const workflowInputs: WorkflowInputs = {
           jobId,
           tenantId,
@@ -276,10 +299,12 @@ export async function POST(request: NextRequest) {
           forceCreate: item.forceCreate || forceCreate,
         };
 
-        // Trigger the GitHub Actions workflow and capture run ID
-        const triggerResult = await triggerPackagingWorkflow(workflowInputs);
+        const triggerResult = await triggerPackagingWorkflow(
+          workflowInputs,
+          undefined,
+          { skipRunCapture: isBatch }
+        );
 
-        // Update job status to packaging with run info if available
         const updateData: Record<string, unknown> = {
           status: 'packaging',
           packaging_started_at: new Date().toISOString(),
@@ -292,6 +317,14 @@ export async function POST(request: NextRequest) {
 
         await db.jobs.update(jobId, updateData);
 
+        return { item, jobId, createdAt, triggerResult };
+      })
+    );
+
+    // Collect results from parallel dispatches
+    dispatchResults.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        const { item, jobId, createdAt } = result.value;
         jobs.push({
           id: jobId,
           user_id: userId,
@@ -302,15 +335,16 @@ export async function POST(request: NextRequest) {
           publisher: item.publisher,
           status: 'packaging',
           package_config: item,
-          created_at: jobRecord?.created_at || new Date().toISOString(),
+          created_at: createdAt,
         });
-      } catch (error) {
+      } else {
+        const dispatch = pendingDispatches[idx];
         errors.push({
-          wingetId: item.wingetId,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          wingetId: dispatch?.item.wingetId || 'unknown',
+          error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
         });
       }
-    }
+    });
 
     // Return results
     return NextResponse.json({
