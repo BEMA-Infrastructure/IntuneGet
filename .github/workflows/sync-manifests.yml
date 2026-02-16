@@ -326,8 +326,21 @@ jobs:
                   const localeManifest = await fetchLocaleManifest(app.winget_id, latestVersion);
 
                   // Extract installer data
-                  const installers = installerManifest.Installers || [];
-                  const defaultInstaller = installers[0] || {};
+                  const rawInstallers = installerManifest.Installers || [];
+                  const defaultInstaller = rawInstallers[0] || {};
+
+                  // Inherit root-level manifest fields into each installer so the
+                  // JSONB is self-contained (individual installers may omit fields
+                  // that are defined at the manifest root, e.g. InstallerType).
+                  const rootType = installerManifest.InstallerType || null;
+                  const rootScope = installerManifest.Scope || null;
+                  const rootSwitches = installerManifest.InstallerSwitches || null;
+                  const installers = rawInstallers.map(inst => ({
+                    ...inst,
+                    InstallerType: inst.InstallerType || rootType,
+                    Scope: inst.Scope || rootScope,
+                    InstallerSwitches: inst.InstallerSwitches || rootSwitches,
+                  }));
 
                   // Prepare version history record
                   const versionRecord = {

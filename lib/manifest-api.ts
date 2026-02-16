@@ -263,7 +263,7 @@ async function getManifestFromSupabase(
     // Parse installers from JSONB, recover malformed stringified JSON, or fetch fresh installer manifest
     let installers: WingetInstaller[] = [];
 
-    const parsedInstallers = coerceInstallersArray(versionData.installers);
+    const parsedInstallers = coerceInstallersArray(versionData.installers, versionData.installer_type);
 
     if (parsedInstallers.length > 0) {
       installers = parsedInstallers;
@@ -310,7 +310,7 @@ async function getManifestFromSupabase(
   }
 }
 
-function coerceInstallersArray(rawInstallers: unknown): WingetInstaller[] {
+function coerceInstallersArray(rawInstallers: unknown, defaultType?: string): WingetInstaller[] {
   let installerArray: Array<Record<string, unknown>> = [];
 
   if (Array.isArray(rawInstallers)) {
@@ -334,7 +334,7 @@ function coerceInstallersArray(rawInstallers: unknown): WingetInstaller[] {
     Architecture: (inst.Architecture as WingetInstaller['Architecture']) || 'x64',
     InstallerUrl: (inst.InstallerUrl as string) || '',
     InstallerSha256: (inst.InstallerSha256 as string) || '',
-    InstallerType: normalizeInstallerType(inst.InstallerType as string),
+    InstallerType: normalizeInstallerType((inst.InstallerType as string) || defaultType),
     Scope: inst.Scope as WingetInstaller['Scope'],
     InstallerSwitches: inst.InstallerSwitches as WingetInstaller['InstallerSwitches'],
     ProductCode: inst.ProductCode as string,
