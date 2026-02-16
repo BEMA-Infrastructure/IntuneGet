@@ -18,12 +18,12 @@ on:
       limit:
         description: "Maximum number of apps to process (0 = all)"
         required: false
-        default: "2000"
+        default: "0"
         type: string
       mode:
         description: "Sync mode"
         required: false
-        default: "incremental"
+        default: "all"
         type: choice
         options:
           - incremental # Only apps missing version data
@@ -43,7 +43,7 @@ concurrency:
 env:
   NODE_VERSION: "20"
   GITHUB_RAW_BASE: "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests"
-  APP_LIMIT: ${{ github.event.inputs.limit || '2000' }}
+  APP_LIMIT: ${{ github.event.inputs.limit || '0' }}
 
 jobs:
   sync-manifests:
@@ -76,8 +76,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           APP_IDS: ${{ github.event.inputs.app_ids || 'all' }}
-          APP_LIMIT: ${{ github.event.inputs.limit || '2000' }}
-          SYNC_MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          APP_LIMIT: ${{ github.event.inputs.limit || '0' }}
+          SYNC_MODE: ${{ github.event.inputs.mode || 'all' }}
           FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -236,7 +236,7 @@ jobs:
           // Main sync function
           async function syncManifests() {
             const appIds = process.env.APP_IDS;
-            const appLimit = parseInt(process.env.APP_LIMIT || '2000', 10);
+            const appLimit = parseInt(process.env.APP_LIMIT || '0', 10);
             const syncMode = process.env.SYNC_MODE || 'all';
             const forceRefresh = process.env.FORCE_REFRESH === 'true';
 
