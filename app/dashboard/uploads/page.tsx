@@ -177,7 +177,23 @@ export default function UploadsPage() {
     const accessToken = await getAccessToken();
     if (!accessToken) return;
 
-    setCancellingJobId(jobId);
+    // Optimistic UI update: immediately update state so the dialog closes fast
+    const previousJobs = jobs;
+    if (dismiss) {
+      // For dismiss, remove the job from the list immediately
+      setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    } else {
+      // For cancel, mark as cancelled immediately
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === jobId
+            ? { ...j, status: 'cancelled' as const, cancelled_at: new Date().toISOString() }
+            : j
+        )
+      );
+    }
+
+    // Fire the API call in the background
     try {
       const response = await fetch('/api/package/cancel', {
         method: 'POST',
@@ -197,13 +213,13 @@ export default function UploadsPage() {
         throw new Error(`Failed to cancel job (${response.status})`);
       }
 
-      // Refresh jobs to get updated status
-      await fetchJobs();
+      // Silently sync with server to pick up any fields set by the backend
+      fetchJobs();
     } catch (err) {
+      // Revert optimistic update on failure
+      setJobs(previousJobs);
       console.error('Failed to cancel job:', err);
       setError(err instanceof Error ? err.message : `Failed to ${dismiss ? 'dismiss' : 'cancel'} job`);
-    } finally {
-      setCancellingJobId(null);
     }
   };
 
