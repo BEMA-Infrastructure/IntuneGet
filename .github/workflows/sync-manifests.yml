@@ -252,29 +252,37 @@ jobs:
             let apps = [];
 
             if (appIds === 'all') {
-              // Build query based on sync mode
-              let query = supabase
-                .from('curated_apps')
-                .select('winget_id, latest_version')
-                .order('popularity_rank', { ascending: true, nullsFirst: false });
+              // Supabase JS client defaults to 1000 rows max.
+              // Paginate with .range() to fetch all rows up to appLimit.
+              const fetchLimit = appLimit > 0 ? appLimit : 50000;
+              const pageSize = 1000;
+              let allApps = [];
 
-              // Apply mode-specific filters
-              if (syncMode === 'incremental') {
-                // Apps without latest_version (need manifest data)
-                query = query.is('latest_version', null);
-              } else if (syncMode === 'new_only') {
-                // Apps that have never been synced - no version_history at all
-                // This requires a more complex query, so we'll filter after fetch
-                query = query.is('latest_version', null);
+              for (let offset = 0; offset < fetchLimit; offset += pageSize) {
+                const end = Math.min(offset + pageSize - 1, fetchLimit - 1);
+                let query = supabase
+                  .from('curated_apps')
+                  .select('winget_id, latest_version')
+                  .order('popularity_rank', { ascending: true, nullsFirst: false })
+                  .range(offset, end);
+
+                // Apply mode-specific filters
+                if (syncMode === 'incremental') {
+                  query = query.is('latest_version', null);
+                } else if (syncMode === 'new_only') {
+                  query = query.is('latest_version', null);
+                }
+
+                const { data, error } = await query;
+                if (error) {
+                  throw error;
+                }
+                if (!data || data.length === 0) break;
+                allApps = allApps.concat(data);
+                if (data.length < pageSize) break;
               }
-              // 'all' mode - no additional filter
 
-              const { data, error } = await query;
-
-              if (error) {
-                throw error;
-              }
-              apps = data || [];
+              apps = allApps;
             } else {
               // Parse specific app IDs
               apps = appIds.split(',').map(id => ({ winget_id: id.trim() }));
