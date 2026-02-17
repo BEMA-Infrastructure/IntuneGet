@@ -987,7 +987,7 @@ if ($useRegistryUninstall) {
         ''
         '    if ($installedApp) {'
         '        Write-ADTLogEntry -Message "Found via registry name, uninstalling..." -Source ''Uninstall-ADTDeployment'''
-        '        Uninstall-ADTApplication -Name $appName -SuccessExitCodes @(0, 1605, 1614)'
+        '        Uninstall-ADTApplication -Name $appName -SuccessExitCodes @(0, 1605, 1614) -RebootExitCodes @(1641, 3010)'
         '    } else {'
         '        Write-ADTLogEntry -Message "Not found by name ''$appName'', falling back to winget uninstall --id $wingetId" -Severity ''Warning'' -Source ''Uninstall-ADTDeployment'''
         ''
@@ -1058,7 +1058,7 @@ if ($useRegistryUninstall) {
         '    if ($uninstallCmd -match ''\{[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\}'') {'
         '        $productCode = $Matches[0]'
         '        Write-ADTLogEntry -Message "Detected MSI product code: $productCode - using Start-ADTMsiProcess" -Severity ''Info'' -Source ''Uninstall-ADTDeployment'''
-        '        Start-ADTMsiProcess -Action ''Uninstall'' -ProductCode $productCode -SuccessExitCodes @(0, 1605, 1614)'
+        '        Start-ADTMsiProcess -Action ''Uninstall'' -ProductCode $productCode -SuccessExitCodes @(0, 1605, 1614, 3010, 1641)'
         '    } else {'
         '        # EXE-based uninstaller - parse and execute with timeout'
         '        if ($uninstallCmd -match ''^"([^"]+)"(.*)$'') {'
@@ -1079,7 +1079,7 @@ if ($useRegistryUninstall) {
         '        }'
         ''
         '        Write-ADTLogEntry -Message "Executing EXE uninstall: $uninstallExe $uninstallArgs" -Severity ''Info'' -Source ''Uninstall-ADTDeployment'''
-        '        Start-ADTProcess -FilePath $uninstallExe -ArgumentList $uninstallArgs -WindowStyle Hidden -WaitForMsiExec -Timeout (New-TimeSpan -Minutes 15) -TimeoutAction Stop -SuccessExitCodes @(0, 1605, 1614)'
+        '        Start-ADTProcess -FilePath $uninstallExe -ArgumentList $uninstallArgs -WindowStyle Hidden -WaitForMsiExec -Timeout (New-TimeSpan -Minutes 15) -TimeoutAction Stop -SuccessExitCodes @(0, 1605, 1614, 3010, 1641)'
         '    }'
     )
 }
