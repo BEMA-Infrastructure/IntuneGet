@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { handleAutoUpdateJobCompletion } from '@/lib/auto-update/cleanup';
 
 const STALE_JOB_TIMEOUT_MINUTES = 30;
 const INTERMEDIATE_STATES = ['queued', 'packaging', 'uploading'];
@@ -35,10 +36,10 @@ export async function GET(request: Request) {
       Date.now() - STALE_JOB_TIMEOUT_MINUTES * 60 * 1000
     ).toISOString();
 
-    // Find stale jobs
+    // Find stale jobs (include auto-update fields for cleanup)
     const { data: staleJobs, error: fetchError } = await supabase
       .from('packaging_jobs')
-      .select('id, status, winget_id, updated_at, created_at')
+      .select('id, status, winget_id, updated_at, created_at, is_auto_update, auto_update_policy_id')
       .in('status', INTERMEDIATE_STATES)
       .lt('updated_at', cutoffTime);
 
@@ -75,6 +76,27 @@ export async function GET(request: Request) {
         { error: 'Failed to update stale jobs', details: updateError.message },
         { status: 500 }
       );
+    }
+
+    // Clean up auto-update tracking for stale auto-update jobs
+    const autoUpdateJobs = staleJobs.filter((job) => job.is_auto_update);
+    if (autoUpdateJobs.length > 0) {
+      const timeoutMessage = `Job timed out after ${STALE_JOB_TIMEOUT_MINUTES} minutes without progress`;
+      const cleanupResults = await Promise.allSettled(
+        autoUpdateJobs.map((job) =>
+          handleAutoUpdateJobCompletion(job.id, 'failed', timeoutMessage)
+        )
+      );
+
+      for (let i = 0; i < cleanupResults.length; i++) {
+        const result = cleanupResults[i];
+        if (result.status === 'rejected') {
+          console.error(
+            `[CronCleanup] Auto-update cleanup failed for job ${autoUpdateJobs[i].id}:`,
+            result.reason
+          );
+        }
+      }
     }
 
     return NextResponse.json({

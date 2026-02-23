@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
 import { verifyCallbackSignature } from '@/lib/callback-signature';
 import { onJobCompleted } from '@/lib/msp/batch-orchestrator';
+import { handleAutoUpdateJobCompletion } from '@/lib/auto-update/cleanup';
 
 interface PackageCallbackBody {
   jobId: string;
@@ -176,6 +177,11 @@ export async function POST(request: NextRequest) {
       // Fire and forget - don't block the callback response
       onJobCompleted(data.jobId, jobStatus, data.message).catch((err) => {
         console.error('[Callback] Batch orchestrator error:', err);
+      });
+
+      // Clean up auto-update tracking if this was an auto-update job
+      handleAutoUpdateJobCompletion(data.jobId, data.status, data.message).catch((err) => {
+        console.error('[Callback] Auto-update cleanup error:', err);
       });
     }
 

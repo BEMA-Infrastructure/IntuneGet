@@ -8,6 +8,7 @@ import { createServerClient } from '@/lib/supabase';
 import { getDatabase } from '@/lib/db';
 import { cancelWorkflowRun, isGitHubActionsConfigured } from '@/lib/github-actions';
 import { parseAccessToken } from '@/lib/auth-utils';
+import { handleAutoUpdateJobCompletion } from '@/lib/auto-update/cleanup';
 import type { Database } from '@/types/database';
 
 interface CancelRequestBody {
@@ -77,6 +78,15 @@ export async function POST(request: NextRequest) {
     // If dismiss flag is set and job is in a terminal state, delete the row
     const terminalStatuses = ['completed', 'failed', 'cancelled', 'duplicate_skipped', 'deployed'];
     if (dismiss && terminalStatuses.includes(typedJob.status)) {
+      // Run auto-update cleanup before deleting (defense-in-depth for stuck jobs)
+      if (typedJob.is_auto_update) {
+        const dismissStatus = (typedJob.status === 'deployed' || typedJob.status === 'duplicate_skipped')
+          ? typedJob.status as 'deployed' | 'duplicate_skipped'
+          : 'cancelled';
+        await handleAutoUpdateJobCompletion(jobId, dismissStatus).catch((err) => {
+          console.error('[Cancel] Auto-update cleanup error on dismiss:', err);
+        });
+      }
       const db = getDatabase();
       await db.jobs.deleteById(jobId);
       return NextResponse.json({
@@ -189,6 +199,11 @@ export async function POST(request: NextRequest) {
       // Minimal update succeeded
       updateError = null;
     }
+
+    // Clean up auto-update tracking
+    handleAutoUpdateJobCompletion(jobId, 'cancelled', errorMessage).catch((err) => {
+      console.error('[Cancel] Auto-update cleanup error:', err);
+    });
 
     return NextResponse.json({
       success: true,
