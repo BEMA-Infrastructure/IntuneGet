@@ -33,9 +33,9 @@ jobs:
           mv ./supabase ./.next/standalone/supabase
           mv ./.next/static ./.next/standalone/.next/static
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.INTUNEGET_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.INTUNEGET_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ secrets.INTUNEGET_CLIENT_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_AD_CLIENT_ID }}
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -73,5 +73,6 @@ jobs:
           package: .
 
           
+
 
 
