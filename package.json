@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:azure": "node_modules/next/dist/bin/next start",
     "lint": "next lint",
     "prepare": "husky",
     "test": "vitest run",
