@@ -124,7 +124,6 @@ jobs:
                 tags: pkg.Tags || [],
                 winget_last_update: pkg.LastUpdate || null,
                 is_verified: true, // Source is authoritative (winget-pkgs)
-                is_winget_verified: true,
                 updated_at: new Date().toISOString()
               };
             }).filter(app => app.winget_id); // Filter out any entries without ID
